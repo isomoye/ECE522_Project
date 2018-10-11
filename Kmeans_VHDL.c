@@ -583,17 +583,22 @@ void LoadUnloadBRAM(int max_string_len, int max_vals, int num_vals, int load_unl
 
 int main(int argc, char *argv[])
    {
+	   
+	volatile unsigned int *CtrlRegA;
+	volatile unsigned int *DataRegA;
+	unsigned int ctrl_mask;
+	
    int num_points, num_dims, num_clusters; 
 
    double *points, *centroids; 
    int *final_cluster_assignment;
 
-   short *points_short;
+   short *points_short, centroids_short, hw_data;
    int *actual_clusters;
 
    char infile_name[MAX_STRING_LEN];
 
-   int point_num, dim_num, clust_num;
+   int point_num, dim_num, clust_num, hw_num;
 
 // ======================================================================================================================
 // COMMAND LINE
@@ -605,6 +610,19 @@ int main(int argc, char *argv[])
 
    sscanf(argv[1], "%s", infile_name);
    sscanf(argv[2], "%d", &num_clusters);
+   
+   
+   
+   // Open up the memory mapped device so we can access the GPIO registers.
+   int fd = open("/dev/mem", O_RDWR|O_SYNC);
+
+   if (fd < 0) 
+      { printf("ERROR: /dev/mem could NOT be opened!\n"); exit(EXIT_FAILURE); }
+
+// Add 2 for the DataReg (for an offset of 8 bytes for 32-bit integer variables)
+   DataRegA = mmap(0, getpagesize(), PROT_READ|PROT_WRITE, MAP_SHARED, fd, GPIO_0_BASE_ADDR);
+   CtrlRegA = DataRegA + 2;
+   
 
 // ================================================
 // Parameters
@@ -614,6 +632,11 @@ int main(int argc, char *argv[])
 // Read the data from the input file
    if ( (points_short = (short *)calloc(sizeof(short), MAX_DATA_VALS)) == NULL )
       { printf("ERROR: Failed to allocate data 'points_short' array!\n"); exit(EXIT_FAILURE); }
+   if ( (centroids_short = (short *)calloc(sizeof(short), MAX_DATA_VALS)) == NULL )
+      { printf("ERROR: Failed to allocate data 'points_short' array!\n"); exit(EXIT_FAILURE); }
+   if ( (hw_data = (short *)calloc(sizeof(short), MAX_DATA_VALS*MAX_DATA_VALS)) == NULL )
+      { printf("ERROR: Failed to allocate data 'points_short' array!\n"); exit(EXIT_FAILURE); }
+    
    if ( (actual_clusters = (int *)calloc(sizeof(int), MAX_DATA_VALS)) == NULL )
       { printf("ERROR: Failed to allocate data 'actual_clusters' array!\n"); exit(EXIT_FAILURE); }
    num_points = Read2DData(MAX_STRING_LEN, MAX_DATA_VALS, infile_name, points_short, actual_clusters);
@@ -628,11 +651,19 @@ int main(int argc, char *argv[])
    if ((final_cluster_assignment  = (int *)malloc(sizeof(int) * num_points)) == NULL )
       { printf("ERROR: Failed to allocate data 'final_cluster_assignment' array!\n"); exit(EXIT_FAILURE); }
 
+  
+  
+  
+   // Set the control mask to indicate enrollment. 
+   ctrl_mask = 0;
+  
 // Convert the short data to double
    for ( point_num = 0; point_num < num_points; point_num++ )
       for ( dim_num = 0; dim_num < num_dims; dim_num++ )
          points[point_num*num_dims + dim_num] = (double)points_short[point_num*num_dims + dim_num];
 
+	 
+	 
 // Randomly select data points that will serve as the initial guess on the thresholds. NOTE: You MUST define ALL dimensions in 
 // the centroids. Individual dimensions are stored consecutatively.
    srand((unsigned) 0);
@@ -642,9 +673,24 @@ int main(int argc, char *argv[])
       for ( dim_num = 0; dim_num < num_dims; dim_num++ )
          {
          centroids[clust_num*num_dims + dim_num] = points[point_num*num_dims + dim_num];
+		 centroids_short[clust_num*num_dims + dim_num] = (short)centroids[clust_num*num_dims + dim_num];
          printf("Centroid %d choosen as random point %d with value %f\n", clust_num, point_num, centroids[clust_num*num_dims + dim_num]); 
          }
       }
+	  
+	  
+	  
+		CopyAssignmentArray(1, (short)num_vals, hw_data); 
+		CopyAssignmentArray(1, (short)num_clusters, hw_data[1]);
+		CopyAssignmentArray(1, (short)num_dims, hw_data[2]);		
+		CopyAssignmentArray(num_points*num_dims, points_short, hw_data[3]); 
+		CopyAssignmentArray(num_dims * num_clusters, centroids_short, hw_data[num_points*num_dims +3]); 
+		
+		
+		hw_num = (num_points*num_dims)+ (num_dims * num_clusters) +3;
+	  
+	  
+	  
 // ==================================================================================
 // Software computed values. Hardware reports mean WITH 4 bits of precision but range using ONLY the integer portion.
    gettimeofday(&t0, 0);
@@ -655,6 +701,26 @@ int main(int argc, char *argv[])
    printf("\tSoftware Runtime %ld us\n\n", (long)elapsed);
 // ==================================================================================
 
+
+// Do a soft RESET
+   *CtrlRegA = ctrl_mask | (1 << OUT_CP_RESET);
+   *CtrlRegA = ctrl_mask;
+   usleep(1000);
+   
+   
+   // Wait for the hardware to be ready -- should be on first check.
+   while ( ((*DataRegA) & (1 << IN_SM_READY)) == 0 );
+
+// Start clock
+   gettimeofday(&t0, 0);
+
+// Start the VHDL Controller
+   *CtrlRegA = ctrl_mask | (1 << OUT_CP_START);
+   *CtrlRegA = ctrl_mask;
+
+// Controller expects data to be transferred to the BRAM as the first operation.
+   load_unload = 0;
+   LoadUnloadBRAM(MAX_STRING_LEN, MAX_DATA_VALS, hw_num, load_unload, hw_data, CtrlRegA, DataRegA, ctrl_mask);
 
    for ( point_num = 0; point_num < num_points; point_num++ )
       printf("Point %d assigned to cluster %d\n", point_num, final_cluster_assignment[point_num]);

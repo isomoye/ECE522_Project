@@ -34,7 +34,7 @@ architecture beh of CalcAllDist is
    signal dist_addr_reg, dist_addr_next : unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
    signal cluster_val_reg, cluster_val_next:  unsigned(3 downto 0);
    
-   
+   signal received : std_logic;
 -- For selecting between PN or CalcAllDist portion of memory during memory accesses
    signal do_PN_Kmeans_addr: std_logic;
 
@@ -136,49 +136,32 @@ architecture beh of CalcAllDist is
 			
 			
 -- =====================
--- Find smallest value (this works for signed PN values, e.g., positive or negative).
+-- get bram address of current centroid.
          when get_cluster_addr =>
-		 
-			lower_val_next < = signed(PNL_BRAM_dout);
-			state_next <= get_upper_addr;
+		    if(cluster_val_reg = CLUST_NUM -1) then
+			state_next <= get_point_addr;
+			else
+			centroids_addr_next <= to_unsigned(KMEANS_CLUST_LOWER_LIMIT,PNL_BRAM_ADDR_SIZE_NB )
+			+ (cluster_val_reg * NUM_DIMS)
+			start_calcDistance <= '1';
+			state_next <= get_dist;
+			end if;
                
-
--- =====================
--- Start constructing the CalcAllDistgram. PN portion of memory is selected and driving 'dout' since 'do_PN_diff_addr' was set to '0' 
--- in previous state.
-        when get_upper_addr =>
-
-			PN_addr_next <= points_addr_reg + PN_DIFF_VALUE;			
-			state_next <= get_upper_val;
-
--- =====================
--- Add 1 to the memory location addressed by diff_addr_next/reg
-        when get_upper_val =>
-		
-		 	upper_val_next <= signed(PNL_BRAM_dout);
-			points_addr_next <= points_addr_reg +1; 
-			diff_addr_next <= diff_addr_reg;
-			state_next <= get_diff;
+			   
+--get distance value
+		when get_dist
+		if(calcDistance_ready = '1')
+			distance_val_next <= calcDistance_dout
+			received = '1';
 			
-		when get_diff =>
-			
-			do_PN_diff_addr <= 1;
-			PNL_BRAM_we <= "1";
-			PNL_BRAM_din <= std_logic_vector(upper_val_reg - lower_val_reg);
-			state_next <= inc_diff_addr;
-		
-		when inc_diff_addr =>
-		
-			diff_addr_next <= diff_addr_reg + 1;
-			state_next <= get_lower_addr;
 
       end case;
    end process;
 
 -- Using _reg here (not the look-ahead _next value).
-   with do_PN_diff_addr select
+   with do_PN_dist_addr select
       PNL_BRAM_addr <= std_logic_vector(PN_addr_next) when '0',
-                       std_logic_vector(diff_addr_next) when others;
+                       std_logic_vector(dist_addr_next) when others;
 
    CalcAllDist_ERR <= CalcAllDist_ERR_reg;
    ready <= ready_reg;
