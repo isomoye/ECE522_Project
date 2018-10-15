@@ -26,262 +26,505 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.all;
+use IEEE.fixed_pkg.all;
 
 library work;
 use work.DataTypes_pkg.all;
 
 entity Kmeans is
-   port( 
-      Clk: in  std_logic;
-      RESET: in std_logic;
-      start: in std_logic;
-      ready: out std_logic;
-      PN_Diff_ERR: out std_logic;
-      PNL_BRAM_addr: out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
-      PNL_BRAM_din: out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
-      PNL_BRAM_dout: in std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
-      PNL_BRAM_we: out std_logic_vector(0 to 0)
-      );
+	port(
+		Clk           : in  std_logic;
+		RESET         : in  std_logic;
+		start         : in  std_logic;
+		ready         : out std_logic;
+		Kmeans_ERR    : out std_logic;
+		PNL_BRAM_addr : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		PNL_BRAM_din  : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		PNL_BRAM_we   : out std_logic_vector(0 to 0)
+	);
 end Kmeans;
 
 architecture beh of Kmeans is
-   type state_type is (idle, clear_mem, get_lower_addr, get_lower_val, get_upper_addr, get_upper_val, get_diff, inc_diff_addr, check_Kmeans_error);
-   signal state_reg, state_next: state_type;
+	type state_type is (idle, get_prog_addr, get_prog_vals, wait_find_centroid, wait_copy, start_iteration, wait_calc_cluster, wait_total, fail_improve, wait_calcAll, wait_change_count);
+	signal state_reg, state_next : state_type;
 
-   signal ready_reg, ready_next: std_logic;
+	signal ready_reg, ready_next : std_logic;
 
--- Address registers for the PNs and Kmeansgram portions of memory
-   signal PN_addr_reg, PN_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
-   signal upper_pn_addr_reg, upper_pn_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
-   signal lower_pn_addr_reg, lower_pn_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
+	type Select_Enum is (a, b, c, d, e, f, g, h);
 
--- For selecting between PN or Kmeans portion of memory during memory accesses
-   signal do_PN_diff_addr: std_logic;
+	signal KMEANS_BRAM_select : Select_Enum;
 
--- Stores the full 16-bit PN that is the smallest among all in the data set
-   signal smallest_val_reg, smallest_val_next: signed(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
-   signal lower_val_reg, lower_val_next: signed(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
-   signal upper_val_reg, upper_val_next: signed(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
+	signal Kmeans_ERR_reg, Kmeans_ERR_next : std_logic;
 
--- These are 12 bits each to hold only the 12-bit integer portion of the PNs
-   signal shifted_dout: signed(PN_INTEGER_NB-1 downto 0);
-   signal shifted_smallest_val: signed(PN_INTEGER_NB-1 downto 0);
+	--calcDist_start
+	--calcDist_ready
+	--signals for CalAllDistances module
+	signal CalAllDistance_start     : std_logic;
+	signal CalAllDistance_ready     : std_logic;
+	signal CalAllDistance_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalAllDistance_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal CalAllDistance_BRAM_we   : std_logic_vector(0 to 0);
+	signal CalAll_Dist_start        : std_logic;
+	signal CalAllDistance_P1_addr   : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalAllDistance_P2_addr   : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalAllDistance_Num_dims  : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
--- These signals used in the calculation of the address in the Kmeansgram memory of the cell to add 1 to during the Kmeans
--- contruction. They are addresses and therefore need to match the address width of the memory.
-   signal offset_addr: signed(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
-   signal diff_cell_addr: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
+	signal Check_assigns_start         : std_logic;
+	signal Check_assigns_ready         : std_logic;
+	signal Check_assigns_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Check_assigns_BRAM_din      : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Check_assigns_BRAM_we       : std_logic_vector(0 to 0);
+	signal Check_assigns_Num_Vals      : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Check_assigns_SRC_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Check_assigns_TGT_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Change_Count_dout           : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
--- These variables will store the PNL_BRAM addresses when the LV and HV bounds are met.
-   signal LV_addr_reg, LV_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
-   signal HV_addr_reg, HV_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
+	signal Copy_start         : std_logic;
+	signal Copy_ready         : std_logic;
+	signal Copy_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Copy_BRAM_din      : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Copy_Num_vals_in   : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Copy_BRAM_we       : std_logic_vector(0 to 0);
+	signal Copy_SRC_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Copy_TGT_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
--- Use for error checking when the range of the distribution is computed.
-   signal LV_set_reg, LV_set_next: std_logic; 
-   signal HV_set_reg, HV_set_next: std_logic;
+	signal CalcCluster_start     : std_logic;
+	signal CalcCluster_ready     : std_logic;
+	signal CalcCluster_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalcCluster_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal CalcCluster_BRAM_we   : std_logic_vector(0 to 0);
+	-- Error flag is set to '1' if distribution is too narrow to be characterized with the specified bounds, or the integer portion of
+	-- a PN value is outside the range of -1023 and 1024.
 
+	signal Calc_Distance_start         : std_logic;
+	signal Calc_Distance_ready         : std_logic;
+	signal Calc_Distance_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Calc_Distance_P1_addr       : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Calc_Distance_P2_addr       : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Calc_Distance_Num_dims      : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Calc_Distance_CalcDist_dout : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Calc_Distance_BRAM_din      : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Calc_Distance_BRAM_we       : std_logic_vector(0 to 0);
 
--- The register used to sum up the counts in the Kmeansgram as it is parsed left to right. It WILL count up to the number of 
--- PNs stored, which is currently 4096, so we need 13-bit here, not 12.
-   signal diff_reg, diff_next: unsigned(NUM_PNS_NB downto 0);
+	signal CalcTotal_start         : std_logic;
+	signal CalcTotal_ready         : std_logic;
+	signal CalcTotal_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalcTotal_BRAM_din      : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal CalcTotal_BRAM_we       : std_logic_vector(0 to 0);
+	signal CalcTotal_P1_addr       : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalcTotal_P2_addr       : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalcTotal_Dist_start    : std_logic;
+	signal CalcTotal_Num_dims      : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal CalcTotal_CalcDist_dout : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
--- Storage for the mean must be able to accommodate a sum of 4096 values (NUM_PNS) each of which is 16-bits (PNL_BRAM_DBITS_WIDTH_NB) 
--- wide. The number of values summed is 4096 so we need 12-bits, NUM_PNS_NB) where each value is 16-bits (PN_SIZE_NB) so we need
--- an adder that is 28 bits (27 downto 0). The sum is likely to require much fewer bits -- this is worst case. 
-   signal dist_mean_sum_reg, dist_mean_sum_next: signed(NUM_PNS_NB+PN_SIZE_NB-1 downto 0);
+	signal Find_Centroid_start     : std_logic;
+	signal Find_Centroid_ready     : std_logic;
+	signal Find_Num_vals_in        : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Find_Centroid_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Find_Centroid_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Find_Centroid_BRAM_we   : std_logic_vector(0 to 0);
 
--- The final mean and range computed from the Kmeansgram. Written to memory below.
-   signal dist_mean: std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB-1 downto 0);
-   signal dist_range: std_logic_vector(Kmeans_MAX_RANGE_NB-1 downto 0);
+	signal Kmeans_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	--signal Kmeans_Centroid_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	--signal Kmeans_Centroid_BRAM_we   : std_logic_vector(0 to 0);
 
--- Error flag is set to '1' if distribution is too narrow to be characterized with the specified bounds, or the integer portion of
--- a PN value is outside the range of -1023 and 1024.
-   signal DIFF_ERR_reg, DIFF_ERR_next: std_logic;
+	-- registers for iterations, prev_totD and cur_todD.
+	signal dist_count_reg, dist_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Top_Num_Vals                    : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Top_Num_Clusters                : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal Top_Num_Dims                    : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
-   begin
+	signal tot_D_reg, tot_D_next           : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
+	signal prev_tot_D_reg, prev_tot_D_next : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 
--- Compute the mean with full precision. Divide through by 2^12 or 4096 since that's the number of PNs we add to the sum.
-   dist_mean <= std_logic_vector(resize(dist_mean_sum_reg/(2**NUM_PNS_NB), PNL_BRAM_DBITS_WIDTH_NB));
+	type myEnum is (a, b, c, d);
+	signal copy_select        : myEnum;
+	--	signal copy_select         : std_logic_vector(1 downto 0);
+	signal CalcAll_select     : myEnum;
+	signal CalcCluster_select : myEnum;
+	--	signal calcDistance_select : std_logic_vector(1 downto 0);
 
--- The range of the distribution is computed as the difference in the addresses which were set when the running sum of the counts in
--- the Kmeans (as we sweep left to right) became equal to the percentages we defined as the limits, e.g., 6.25% and 93.75%.
--- NOTE: 'Kmeans_MAX_RANGE_NB" is 12 because the number of memory elements allocated for Kmeans memory is 2^12 = 2048, so 12 bits are 
--- needed to allow the range to reach 2048 (one bigger than 2047, which is 2^11).
-   dist_range <= std_logic_vector(resize(HV_addr_reg - LV_addr_reg + 1, Kmeans_MAX_RANGE_NB));
+begin
 
+	CalcAllDistanceMod : entity work.CalcAllDistance(beh)
+		port map(
+			Clk            => Clk,
+			RESET          => RESET,
+			start          => CalAllDistance_start,
+			ready          => CalAllDistance_ready,
+			PNL_BRAM_addr  => CalAllDistance_BRAM_addr,
+			PNL_BRAM_din   => CalAllDistance_BRAM_din,
+			PNL_BRAM_dout  => PNL_BRAM_dout,
+			PNL_BRAM_we    => CalAllDistance_BRAM_we,
+			calcDist_start => CalAll_Dist_start,
+			calcDist_ready => Calc_Distance_ready,
+			P1_addr        => CalAllDistance_P1_addr,
+			P2_addr        => CalAllDistance_P2_addr,
+			Num_dims       => CalAllDistance_Num_dims,
+			CalcDist_dout  => Calc_Distance_CalcDist_dout
+		);
 
--- =============================================================================================
--- State and register logic
--- =============================================================================================
-   process(Clk, RESET)
-      begin
-      if ( RESET = '1' ) then
-         state_reg <= idle;
-         ready_reg <= '1';
-         PN_addr_reg <= (others => '0');
-         lower_pn_addr_reg <= (others => '0');
-		 upper_pn_addr_reg <= (others => '0');
-         smallest_val_reg <= (others => '0');
-         LV_addr_reg <= (others => '0');
-         HV_addr_reg <= (others => '0');
-         LV_set_reg <= '0';
-         HV_set_reg <= '0';
-         dist_cnt_sum_reg <= (others => '0');
-         dist_mean_sum_reg <= (others => '0');
-         DIFF_ERR_reg <= '0';
-      elsif ( Clk'event and Clk = '1' ) then
-         state_reg <= state_next;
-         ready_reg <= ready_next;
-         PN_addr_reg <= PN_addr_next;
-         lower_pn_addr_reg <= lower_pn_addr_next;
-		 uppper_pn_addr_reg <= upper_pn_addr_next;
-         smallest_val_reg <= smallest_val_next;
-         LV_addr_reg <= LV_addr_next;
-         HV_addr_reg <= HV_addr_next;
-         LV_set_reg <= LV_set_next;
-         HV_set_reg <= HV_set_next;
-         dist_cnt_sum_reg <= dist_cnt_sum_next;
-         dist_mean_sum_reg <= dist_mean_sum_next;
-         DIFF_ERR_reg <= Kmeans_ERR_next;
-      end if; 
-   end process;
+	CalcCentroidsMod : entity work.CalcClusterCentroids(beh)
+		port map(
+			Clk           => Clk,
+			RESET         => RESET,
+			start         => CalcCluster_start,
+			ready         => CalcCluster_ready,
+			PNL_BRAM_addr => CalcCluster_BRAM_addr,
+			PNL_BRAM_din  => CalcCluster_BRAM_din,
+			PNL_BRAM_dout => PNL_BRAM_dout,
+			PNL_BRAM_we   => CalcCluster_BRAM_we
+		);
 
+	CalcDistMod : entity work.CalcDistance(beh)
+		port map(
+			Clk           => Clk,
+			RESET         => RESET,
+			start         => Calc_Distance_start,
+			ready         => Calc_Distance_ready,
+			PNL_BRAM_addr => Calc_Distance_BRAM_addr,
+			P1_addr       => Calc_Distance_P1_addr,
+			P2_addr       => Calc_Distance_P2_addr,
+			Num_dims      => Calc_Distance_Num_dims,
+			CalcDist_dout => Calc_Distance_CalcDist_dout,
+			PNL_BRAM_din  => Calc_Distance_BRAM_din,
+			PNL_BRAM_dout => PNL_BRAM_dout,
+			PNL_BRAM_we   => Calc_Distance_BRAM_we
+		);
 
--- Convert the two quantities that will participate in computing the address of appropriate distribution cell that we will
--- add 1 to to create the Kmeansgram. these trim off the low order 4 bits of precision of the current word on the output
--- of the BRAM and the smallest_val computed in the loop below. NOTE: the RANGE MUST NEVER EXCEED +/- 1023 since we have 
--- ONLY 2048 memory locations dedicated to the distribution. 
-   shifted_dout <= resize(signed(PNL_BRAM_dout)/16, PN_INTEGER_NB);
---  shifted_smallest_val <= resize(smallest_val_reg/16, PN_INTEGER_NB);
+	CalcTotalMod : entity work.CalcTotalDistance(beh)
+		port map(
+			Clk                    => Clk,
+			RESET                  => RESET,
+			start                  => CalCTotal_start,
+			ready                  => CalCTotal_ready,
+			PNL_BRAM_addr          => CalCTotal_BRAM_addr,
+			PNL_BRAM_din           => CalCTotal_BRAM_din,
+			PNL_BRAM_dout          => PNL_BRAM_dout,
+			PNL_BRAM_we            => CalCTotal_BRAM_we,
+			calcDist_start         => CalcTotal_Dist_start,
+			calcDist_ready         => Calc_Distance_ready,
+			P1_addr                => CalCTotal_P1_addr,
+			P2_addr                => CalCTotal_P2_addr,
+			Num_dims               => CalCTotal_Num_dims,
+			CalcDist_dout          => CalCTotal_CalcDist_dout,
+			CalcTotalDistance_dout => Calc_Distance_CalcDist_dout
+		);
 
--- Compute the offset address in the Kmeans portion of memory by taking the integer portion of 'dout' - the integer portion
--- of the smallest value among all PNs. This address MUST fall into the range 0 to 2047.
--- offset_addr <= resize(shifted_dout, PNL_BRAM_ADDR_SIZE_NB) - resize(shifted_smallest_val, PNL_BRAM_ADDR_SIZE_NB);
+	Check_assignsMod : entity work.CheckIfAssignmentCountChanged(beh)
+		port map(
+			Clk               => Clk,
+			RESET             => RESET,
+			start             => Check_assigns_start,
+			ready             => Check_assigns_ready,
+			PNL_BRAM_addr     => Check_assigns_BRAM_addr,
+			PNL_BRAM_din      => Check_assigns_BRAM_din,
+			PNL_BRAM_dout     => PNL_BRAM_dout,
+			PNL_BRAM_we       => Check_assigns_BRAM_we,
+			Num_Vals          => Check_assigns_Num_Vals,
+			SRC_BRAM_addr     => Check_assigns_SRC_BRAM_addr,
+			TGT_BRAM_addr     => Check_assigns_TGT_BRAM_addr,
+			Change_Count_dout => Change_Count_dout
+		);
 
--- Add the offset computed above to the base address of the Kmeansgram portion of BRAM.
--- Kmeans_cell_addr <= unsigned(offset_addr) + to_unsigned(Kmeans_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
+	CopyAssignMod : entity work.CopyAssignmentArray(beh)
+		port map(
+			num_vals_in   => Copy_num_vals_in,
+			Clk           => Clk,
+			RESET         => RESET,
+			start         => Copy_start,
+			ready         => Copy_ready,
+			PNL_BRAM_addr => Copy_BRAM_addr,
+			PNL_BRAM_din  => Copy_BRAM_din,
+			PNL_BRAM_dout => PNL_BRAM_dout,
+			PNL_BRAM_we   => Copy_BRAM_we,
+			SRC_BRAM_addr => Copy_SRC_BRAM_addr,
+			TGT_BRAM_addr => Copy_TGT_BRAM_addr
+		);
 
--- Compute the bounds of the distribution by adding up Kmeans cells from left to right until the sum becomes larger/smaller than
--- a 'fraction' of the total number of values counted in the Kmeansgram (which is 4096). Use 4 here to set the fraction limits to
--- 6.25% and 93.75% for the LV and HV bounds. With a total count across Kmeans cells of 4096, the bounds become 256 and 3840. 
---   LV_bound <= to_unsigned(NUM_PNs, NUM_PNS_NB+1) srl Kmeans_BOUND_PCT_SHIFT_NB;
---   HV_bound <= to_unsigned(NUM_PNs, NUM_PNS_NB+1) - LV_bound;
+	FindCentroidMod : entity work.FindClosestCentroid(beh)
+		port map(
+			num_vals_in   => Find_num_vals_in,
+			Clk           => Clk,
+			RESET         => RESET,
+			start         => Find_Centroid_start,
+			ready         => Find_Centroid_ready,
+			PNL_BRAM_addr => Find_Centroid_BRAM_addr,
+			PNL_BRAM_din  => Find_Centroid_BRAM_din,
+			PNL_BRAM_dout => PNL_BRAM_dout,
+			PNL_BRAM_we   => Find_Centroid_BRAM_we
+		);
+	-- =============================================================================================
+	-- State and register logic
+	-- =============================================================================================
+	process(Clk, RESET)
+	begin
+		if (RESET = '1') then
+			state_reg      <= idle;
+			ready_reg      <= '1';
+			--KMEANS_BRAM_select <= b;
+			tot_D_reg      <= (others => '0');
+			prev_tot_D_reg <= (others => '0');
+		elsif (Clk'event and Clk = '1') then
+			state_reg      <= state_next;
+			ready_reg      <= ready_next;
+			tot_D_reg      <= tot_D_next;
+			prev_tot_D_reg <= prev_tot_D_next;
 
--- =============================================================================================
--- Combo logic
--- =============================================================================================
+		end if;
+	end process;
 
-   process (state_reg, start, ready_reg, lower_pn_addr_reg,upper_pn_addr_reg, diff_addr_reg, lower_val_reg, upper_val_reg,PNL_BRAM_dout)
-      begin
-      state_next <= state_reg;
-      ready_next <= ready_reg;
+	-- =============================================================================================
+	-- Combo logic
+	-- =============================================================================================
 
-      PN_addr_next <= PN_addr_reg;
-	  lower_pn_addr_next <= lower_pn_addr_reg;
-	  uppper_pn_addr_next <= upper_pn_addr_reg;
-      diff_addr_next <= diff_addr_reg;
-      smallest_val_next <= smallest_val_reg;
-      LV_addr_next <= LV_addr_reg; 
-      HV_addr_next <= HV_addr_reg;
-      LV_set_next <= LV_set_reg;
-      HV_set_next <= HV_set_reg; 
-      dist_cnt_sum_next <= dist_cnt_sum_reg;
-      dist_mean_sum_next <= dist_mean_sum_reg;
-      Kmeans_ERR_next <= Kmeans_ERR_reg;
+	process(state_reg, start, ready_reg, Change_Count_dout, prev_tot_D_reg, Find_Centroid_ready, Calc_Distance_ready, CalcTotal_CalcDist_dout, CalAllDistance_Num_dims, tot_D_reg, CalcAll_select, Top_Num_dims, dist_count_reg, Check_assigns_ready, CalcTotal_ready, CalcCluster_select, CalcCluster_ready, CalAllDistance_ready, Copy_ready, copy_select)
+	begin
+		state_next <= state_reg;
+		ready_next <= ready_reg;
 
--- Default value is 0 -- used during memory initialization.
-      PNL_BRAM_din <= (others=>'0');
-      PNL_BRAM_we <= "0";
+		-- Default value is 0 -- used during memory initialization.
+		PNL_BRAM_din <= (others => '0');
+		PNL_BRAM_we  <= "0";
 
-      do_PN_diff_addr <= '0';
+		CalAllDistance_start <= '0';
+		CalcCluster_start    <= '0';
+		Calc_Distance_start  <= '0';
+		CalCTotal_start      <= '0';
+		Check_assigns_start  <= '0';
+		Copy_start           <= '0';
+		Find_Centroid_start  <= '0';
+		--KMEANS_BRAM_select          <= "00";
 
-      case state_reg is
+		tot_D_next      <= tot_D_reg;
+		prev_tot_D_next <= prev_tot_D_reg;
 
--- =====================
-         when idle =>
-            ready_next <= '1';
+		case state_reg is
 
-            if ( start = '1' ) then
-               ready_next <= '0';
+			-- =====================
+			when idle =>
+				ready_next <= '1';
 
--- Reset error flag
-               DIFF_ERR_next <= '0';
+				if (start = '1') then
+					ready_next           <= '0';
+					CalAllDistance_start <= '1';
+					state_next           <= get_prog_addr;
+					copy_select          <= a;
+					CalcAll_select       <= a;
+					CalcCluster_select   <= a;
+					KMEANS_BRAM_select   <= a;
+					tot_D_next           <= (others => '0');
+					prev_tot_D_next      <= (others => '0');
+				end if;
 
--- Zero the register that will eventually define the differences.
-               diff_next <= (others=>'0');
+			when get_prog_addr =>
+				if (dist_count_reg = to_unsigned(PROG_VALS, PNL_BRAM_ADDR_SIZE_NB - 1)) then
+					dist_count_next    <= (others => '0');
+					KMEANS_BRAM_select <= b;
+					state_next         <= wait_calcAll;
+				else
+					Kmeans_BRAM_addr <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + dist_count_reg);
+					state_next       <= get_prog_vals;
+				end if;
 
--- Allow Kmeans_addr to drive PNL_BRAM
-               do_PN_diff_addr <= '1';
+			when get_prog_vals =>
+				if (dist_count_reg = to_unsigned(NUM_VALS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
+					Top_Num_Vals <= unsigned(PNL_BRAM_dout);
+				elsif (dist_count_reg = to_unsigned(NUM_CLUSTERS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
+					Top_Num_Clusters <= unsigned(PNL_BRAM_dout);
+				elsif (dist_count_reg = to_unsigned(NUM_DIMS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
+					Top_Num_Dims <= unsigned(PNL_BRAM_dout);
+				end if;
 
--- Assert 'we' to zero out the first cell at 0.
-               PNL_BRAM_we <= "1";
-               diff_addr_next <= to_unsigned(DIFF_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
-			   lower_pn_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
-			   PN_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
-               state_next <= get_lower_val;
-            end if;
+				dist_count_next <= dist_count_reg + 1;
+				state_next      <= get_prog_addr;
+			when wait_calcAll =>
+				if (CalAllDistance_ready = '1') then
+					KMEANS_BRAM_select  <= c;
+					Find_Centroid_start <= '1';
+					Find_Num_vals_in    <= std_logic_vector(Top_Num_dims);
+					state_next          <= wait_find_centroid;
+				else
+					if (Calc_Distance_ready = '0') then
+						KMEANS_BRAM_select <= b;
+					--	Top_Num_dims       <= CalAllDistance_Num_dims;
+					else
+						KMEANS_BRAM_select <= b;
+					end if;
+				end if;
 
+			when wait_find_centroid =>
+				if (Find_Centroid_ready = '1') then
+					case CalcAll_select is
+						when a =>
+							Copy_start         <= '1';
+							Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(COPY_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							KMEANS_BRAM_select <= d;
+							Copy_Num_vals_in   <= std_logic_vector(Top_Num_dims);
+							state_next         <= wait_copy;
+						when others =>
+							Check_assigns_start         <= '1';
+							Check_assigns_Num_Vals      <= std_logic_vector(Top_Num_dims);
+							Check_assigns_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							Check_assigns_TGT_BRAM_addr <= std_logic_vector(to_unsigned(COPY_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							KMEANS_BRAM_select          <= e;
+							state_next                  <= wait_change_count;
+					end case;
+				end if;
+			when wait_copy =>
+				if (Copy_ready = '1') then
+					case copy_select is
+						when a =>
+							state_next <= idle; --start_iteration;
+						when b =>
+							KMEANS_BRAM_select <= d;
+							CalcCluster_start  <= '1';
+							CalcCluster_select <= b;
+							state_next         <= wait_calc_cluster;
+						when c =>
+							CalAllDistance_start <= '1';
+							CalcAll_select       <= b;
+							state_next           <= wait_calcAll;
+							KMEANS_BRAM_select   <= b;
+						when others =>
+							state_next <= idle;
+					end case;
+				end if;
+			--00 a 01b 10c 11d 
+			when start_iteration =>
+				if (dist_count_reg = to_unsigned(MAX_ITERATIONS, PNL_BRAM_ADDR_SIZE_NB)) then
+					Copy_start         <= '1';
+					Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					KMEANS_BRAM_select <= d;
+					copy_select        <= d;
+					Copy_Num_vals_in   <= std_logic_vector(Top_Num_Vals);
+					state_next         <= wait_copy;
+				else
+					KMEANS_BRAM_select <= d;
+					CalcCluster_start  <= '1';
+					state_next         <= wait_calc_cluster;
+				end if;
 
-			
-		when get_lower_addr =>
-			
-			if ( lower_pn_addr_reg = DIFF_BRAM_UPPER_LIMIT - 1 ) then
-			state_next <= idle;
-			
-			else
-			PN_addr_next <= lower_pn_addr_reg;
-			state_next <= get_lower_val;
-			
-			
-			
--- =====================
--- Find smallest value (this works for signed PN values, e.g., positive or negative).
-         when get_lower_val =>
-		 
-			lower_val_next < = signed(PNL_BRAM_dout);
-			state_next <= get_upper_addr;
-               
+			when wait_calc_cluster =>
+				if (CalcCluster_ready = '1') then
+					case CalcCluster_select is
+						when a =>
+							KMEANS_BRAM_select <= e;
+							CalcTotal_start    <= '1';
+							state_next         <= wait_total;
+						when others =>
+							Copy_start         <= '1';
+							Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+							KMEANS_BRAM_select <= d;
+							copy_select        <= d;
+							Copy_Num_vals_in   <= std_logic_vector(Top_Num_dims);
+							state_next         <= wait_copy;
+					end case;
+				end if;
 
--- =====================
--- Start constructing the Kmeansgram. PN portion of memory is selected and driving 'dout' since 'do_PN_diff_addr' was set to '0' 
--- in previous state.
-        when get_upper_addr =>
+			when wait_total =>
+				if (CalcTotal_ready = '1') then
+					tot_D_next <= sfixed(CalcTotal_CalcDist_dout);
+					state_next <= fail_improve;
+				else
+					if (Calc_Distance_ready = '0') then
+						KMEANS_BRAM_select <= b;
+					--	Top_Num_dims       <= CalAllDistance_Num_dims;
+					else
+						KMEANS_BRAM_select <= b;
+					end if;
+				end if;
 
-			PN_addr_next <= lower_pn_addr_reg + PN_DIFF_VALUE;			
-			state_next <= get_upper_val;
+			when fail_improve =>
 
--- =====================
--- Add 1 to the memory location addressed by diff_addr_next/reg
-        when get_upper_val =>
-		
-		 	upper_val_next <= signed(PNL_BRAM_dout);
-			lower_pn_addr_next <= lower_pn_addr_reg +1; 
-			diff_addr_next <= diff_addr_reg;
-			state_next <= get_diff;
-			
-		when get_diff =>
-			
-			do_PN_diff_addr <= 1;
-			PNL_BRAM_we <= "1";
-			PNL_BRAM_din <= std_logic_vector(upper_val_reg - lower_val_reg);
-			state_next <= inc_diff_addr;
-		
-		when inc_diff_addr =>
-		
-			diff_addr_next <= diff_addr_reg + 1;
-			state_next <= get_lower_addr;
+				if (dist_count_reg /= (dist_count_reg'range => '0') and tot_D_reg > prev_tot_D_reg) then
+					Copy_start         <= '1';
+					Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(COPY_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					KMEANS_BRAM_select <= d;
+					copy_select        <= b;
+				else
+					Copy_start         <= '1';
+					Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(COPY_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					KMEANS_BRAM_select <= d;
+					copy_select        <= c;
+				end if;
+				Copy_Num_vals_in <= std_logic_vector(Top_Num_Vals);
+				state_next       <= wait_copy;
 
-      end case;
-   end process;
+			when wait_change_count =>
+				if (Check_assigns_ready = '1') then
+					if (Change_Count_dout = (Change_Count_dout'range => '0')) then
+						Copy_start         <= '1';
+						Copy_SRC_BRAM_addr <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+						Copy_TGT_BRAM_addr <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+						KMEANS_BRAM_select <= d;
+						copy_select        <= d;
+						Copy_Num_vals_in   <= std_logic_vector(Top_Num_Vals);
+						state_next         <= wait_copy;
+					else
+						dist_count_next <= dist_count_reg + 1;
+						state_next      <= start_iteration;
+					end if;
+				end if;
 
--- Using _reg here (not the look-ahead _next value).
-   with do_PN_diff_addr select
-      PNL_BRAM_addr <= std_logic_vector(PN_addr_next) when '0',
-                       std_logic_vector(diff_addr_next) when others;
+		end case;
+	end process;
 
-   Kmeans_ERR <= Kmeans_ERR_reg;
-   ready <= ready_reg;
+	--PNL_BRAM_addr <= std_logic_vector(PN_addr_next);
+
+	Kmeans_ERR <= Kmeans_ERR_reg;
+
+	with KMEANS_BRAM_select select PNL_BRAM_addr <=
+		Kmeans_BRAM_addr when a,
+		CalAllDistance_BRAM_addr when b,
+		Calc_Distance_BRAM_addr when c,
+		Find_Centroid_BRAM_addr when d,
+		Copy_BRAM_addr when e,
+		CalcCluster_BRAM_addr when f,
+		CalcTotal_BRAM_addr when g,
+		Check_assigns_BRAM_addr when others;
+
+	with KMEANS_BRAM_select select PNL_BRAM_din <=
+		CalAllDistance_BRAM_din when b,
+		Calc_Distance_BRAM_din when c,
+		Find_Centroid_BRAM_din when d,
+		Copy_BRAM_din when e,
+		CalcCluster_BRAM_din when f,
+		CalcTotal_BRAM_din when g,
+		Check_assigns_BRAM_din  when others;
+
+	with KMEANS_BRAM_select select PNL_BRAM_we <=
+		CalAllDistance_BRAM_we when b,
+		Calc_Distance_BRAM_we when c,
+		Find_Centroid_BRAM_we when d,
+		Copy_BRAM_we when e,		
+		CalcCluster_BRAM_we when f,
+		CalcTotal_BRAM_we when g,
+		Check_assigns_BRAM_we  when others;
+
+	with KMEANS_BRAM_select select Calc_Distance_start <=
+		CalAll_Dist_start when b,
+		CalcTotal_Dist_start when others;
+
+	with KMEANS_BRAM_select select Calc_Distance_P1_addr <=
+		CalAllDistance_P1_addr when b,
+		CalCTotal_P1_addr when others;
+
+	with KMEANS_BRAM_select select Calc_Distance_P2_addr <=
+		CalAllDistance_P2_addr when b,
+		CalCTotal_P2_addr when others;
+
+	with KMEANS_BRAM_select select Calc_Distance_Num_dims <=
+		CalAllDistance_Num_dims when b,
+		CalCTotal_Num_dims when others;
+
+	ready <= ready_reg;
 
 end beh;
-
 

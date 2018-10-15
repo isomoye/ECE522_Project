@@ -10,27 +10,28 @@ use IEEE.fixed_pkg.all;
 library work;
 use work.DataTypes_pkg.all;
 
-entity CalcAllDistance is
+entity CalcTotalDistance is
 	port(
-		Clk            : in  std_logic;
-		RESET          : in  std_logic;
-		start          : in  std_logic;
-		ready          : out std_logic;
-		PNL_BRAM_addr  : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		PNL_BRAM_din   : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-		PNL_BRAM_dout  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-		PNL_BRAM_we    : out std_logic_vector(0 to 0);
-		calcDist_start : out std_logic;
-		calcDist_ready : in  std_logic;
-		P1_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		P2_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_dims       : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		CalcDist_dout  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
+		Clk                    : in  std_logic;
+		RESET                  : in  std_logic;
+		start                  : in  std_logic;
+		ready                  : out std_logic;
+		PNL_BRAM_addr          : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		PNL_BRAM_din           : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		PNL_BRAM_dout          : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		PNL_BRAM_we            : out std_logic_vector(0 to 0);
+		calcDist_start         : out std_logic;
+		calcDist_ready         : in  std_logic;
+		P1_addr                : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		P2_addr                : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_dims               : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		CalcDist_dout          : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		CalcTotalDistance_dout : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
 	);
-end CalcAllDistance;
+end CalcTotalDistance;
 
-architecture beh of CalcAllDistance is
-	type state_type is (idle, get_prog_addr, get_prog_vals, get_point_addr, get_cluster_addr, start_calcDist, wait_calcDist);
+architecture beh of CalcTotalDistance is
+	type state_type is (idle, get_prog_addr, get_prog_vals, get_point_addr, start_calcDist, wait_calcDist);
 	signal state_reg, state_next : state_type;
 
 	signal ready_reg, ready_next : std_logic;
@@ -54,7 +55,7 @@ architecture beh of CalcAllDistance is
 
 	-- Stores the full 16-bit distance 
 	signal distance_val_reg, distance_val_next : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
-	signal dist_sqr_reg, dist_sqr_next         : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
+	signal tot_D_reg, tot_D_next               : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal p1_val_reg, p1_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal p2_val_reg, p2_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 
@@ -85,7 +86,7 @@ begin
 			cluster_count_reg  <= (others => '0');
 			dims_count_reg     <= (others => '0');
 			dist_count_reg     <= (others => '0');
-			dist_sqr_reg       <= (others => '0');
+			tot_D_reg          <= (others => '0');
 		elsif (Clk'event and Clk = '1') then
 			state_reg          <= state_next;
 			ready_reg          <= ready_next;
@@ -101,7 +102,7 @@ begin
 			distance_val_reg   <= distance_val_next;
 			dims_count_reg     <= dims_count_next;
 			dist_count_reg     <= dist_count_next;
-			dist_sqr_reg       <= dist_sqr_next;
+			tot_D_reg          <= tot_D_next;
 		end if;
 	end process;
 
@@ -109,7 +110,7 @@ begin
 	-- Combo logic
 	-- =============================================================================================
 
-	process(state_reg, start, ready_reg, points_addr_reg, calcDist_ready, CalcDist_dout, centroids_addr_reg, cluster_count_reg, dist_addr_reg, PN_addr_reg, num_clusters_reg, num_dims_reg, dims_count_reg, p1_val_reg, p2_val_reg, dist_count_reg, dist_sqr_reg, distance_val_reg, num_vals_reg, PNL_BRAM_dout)
+	process(state_reg, start, ready_reg, points_addr_reg, centroids_addr_reg, cluster_count_reg, dist_addr_reg, PN_addr_reg, num_clusters_reg, num_dims_reg, dims_count_reg, p1_val_reg, p2_val_reg, dist_count_reg, num_clusters_next, tot_D_reg, distance_val_reg, num_vals_reg, calcDist_ready, CalcDist_dout, PNL_BRAM_dout)
 	begin
 		state_next <= state_reg;
 		ready_next <= ready_reg;
@@ -121,7 +122,7 @@ begin
 		distance_val_next   <= distance_val_reg;
 		cluster_count_next  <= cluster_count_reg;
 		dims_count_next     <= dims_count_reg;
-		dist_sqr_next       <= dist_sqr_reg;
+		tot_D_next          <= tot_D_reg;
 		p1_val_next         <= p1_val_reg;
 		p2_val_next         <= p2_val_reg;
 		dist_count_next     <= dist_count_reg;
@@ -155,13 +156,10 @@ begin
 					dist_addr_next      <= (others => '0');
 					cluster_count_next  <= (others => '0');
 					distance_val_next   <= (others => '0');
-					dist_sqr_next       <= (others => '0');
+					tot_D_next          <= (others => '0');
 					dist_count_next     <= (others => '0');
 					p1_val_next         <= (others => '0');
 					p2_val_next         <= (others => '0');
-					num_dims_next       <= (others => '0');
-					num_vals_next       <= (others => '0');
-					num_clusters_next   <= (others => '0');
 					centroids_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
 					points_addr_next    <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
 					PN_addr_next        <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
@@ -173,7 +171,7 @@ begin
 					dist_count_next <= (others => '0');
 					state_next      <= get_point_addr;
 				else
-					PN_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + dist_count_reg;
+					PN_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + dist_addr_reg;
 					state_next   <= get_prog_vals;
 				end if;
 
@@ -191,27 +189,16 @@ begin
 
 			when get_point_addr =>
 
-				if (dist_count_reg = resize(num_vals_reg - 1, PNL_BRAM_ADDR_SIZE_NB)) then
-					state_next <= idle;
+				if (dist_count_reg = num_vals_reg - 1) then
+					CalcTotalDistance_dout <= std_logic_vector(tot_D_reg);
+					state_next             <= idle;
 
 				else
-					points_addr_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + unsigned(dist_count_reg * num_dims_reg) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
-					state_next       <= get_cluster_addr;
-				end if;
-
-			-- =====================
-			-- get bram address of current centroid.
-			when get_cluster_addr =>
-				if (cluster_count_reg = resize(num_clusters_reg - 1, PNL_BRAM_ADDR_SIZE_NB)) then
-					cluster_count_next <= (others => '0');
-					dist_count_next    <= dist_count_reg + 1;
-					state_next         <= get_point_addr;
-				else
+					points_addr_next    <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + unsigned(dist_count_reg * num_dims_reg) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
 					centroids_addr_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + (cluster_count_reg * num_dims_reg) + (num_vals_reg * num_dims_reg) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
-					--PN_addr_next        <= points_addr_reg;
 					state_next          <= start_calcDist;
 				end if;
-			-- get p1 value
+
 			when start_calcDist =>
 				P1_addr        <= std_logic_vector(points_addr_reg);
 				P2_addr        <= std_logic_vector(centroids_addr_reg);
@@ -221,14 +208,11 @@ begin
 
 			when wait_calcDist =>
 				if (calcDist_ready = '1') then
-					do_PN_dist_addr    <= '1';
-					PNL_BRAM_din       <= std_logic_vector(CalcDist_dout);
-					PNL_BRAM_we        <= "1";
-					dist_addr_next     <= resize(to_unsigned(DIST_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + ((dist_count_reg * num_clusters_reg) + cluster_count_reg), PNL_BRAM_ADDR_SIZE_NB);
-					cluster_count_next <= cluster_count_reg + 1;
-					state_next         <= get_cluster_addr;
-				end if;
+					tot_D_next      <= tot_D_reg + to_sfixed(CalcDist_dout, PN_INTEGER_NB, -PN_PRECISION_NB);
+					dist_count_next <= dist_count_reg + 1;
+					state_next      <= get_point_addr;
 
+				end if;
 		end case;
 	end process;
 
