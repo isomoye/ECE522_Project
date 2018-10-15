@@ -20,8 +20,8 @@ entity CopyAssignmentArray is
 		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_we   : out std_logic_vector(0 to 0);
 		num_vals_in   : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		SRC_BRAM_addr : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		TGT_BRAM_addr : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0)
+		SRC_BRAM_addr : in std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		TGT_BRAM_addr : in std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0)
 	);
 end CopyAssignmentArray;
 
@@ -33,16 +33,13 @@ architecture beh of CopyAssignmentArray is
 
 	-- Address registers for the PNs and CalcAllDistgram portions of memory
 	signal PN_addr_reg, PN_addr_next           : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-	signal points_addr_reg, points_addr_next   : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal cluster_addr_reg, cluster_addr_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
 	--   signal points_addr_reg, points_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
 
 	-- for iterating through # of points and #cluster
-	signal cluster_count_reg, cluster_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal dist_count_reg, dist_count_next       : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	-- signal cluster_val_reg, cluster_val_next:  unsigned(3 downto 0);
-	signal dims_count_reg, dims_count_next       : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
 	-- For selecting between PN or CalcAllDist portion of memory during memory accesses
 	signal do_PN_cluster_addr : std_logic;
@@ -50,11 +47,7 @@ architecture beh of CopyAssignmentArray is
 	-- Stores the full 16-bit distance 
 	signal cluster_val_reg, cluster_val_next   : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 	signal copy_cluster_reg, copy_cluster_next : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-	signal best_index_reg, best_index_next     : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
-	signal num_vals_reg, num_vals_next         : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-	signal num_clusters_reg, num_clusters_next : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-	signal num_dims_reg, num_dims_next         : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
 begin
 
@@ -69,11 +62,6 @@ begin
 			PN_addr_reg      <= (others => '0');
 			cluster_val_reg  <= (others => '0');
 			cluster_addr_reg <= (others => '0');
-			num_vals_reg     <= (others => '0');
-			best_index_reg   <= (others => '0');
-			num_clusters_reg <= (others => '0');
-			dims_count_reg   <= (others => '0');
-			num_dims_reg     <= (others => '0');
 			dist_count_reg   <= (others => '0');
 			cluster_addr_reg <= (others => '0');
 			copy_cluster_reg <= (others => '0');
@@ -81,14 +69,8 @@ begin
 			state_reg        <= state_next;
 			ready_reg        <= ready_next;
 			PN_addr_reg      <= PN_addr_next;
-			points_addr_reg  <= points_addr_next;
 			cluster_val_reg  <= cluster_val_next;
-			best_index_reg   <= best_index_next;
 			cluster_addr_reg <= cluster_addr_next;
-			dims_count_reg   <= dims_count_next;
-			num_vals_reg     <= num_vals_next;
-			num_clusters_reg <= num_clusters_next;
-			num_dims_reg     <= num_dims_next;
 			dist_count_reg   <= dist_count_next;
 			copy_cluster_reg <= copy_cluster_next;
 		end if;
@@ -98,22 +80,16 @@ begin
 	-- Combo logic
 	-- =============================================================================================
 
-	process(state_reg, start, ready_reg, num_vals_in, PN_addr_reg, TGT_BRAM_addr, SRC_BRAM_addr, num_dims_reg, dims_count_reg, cluster_addr_reg, best_index_reg, num_clusters_reg, dist_count_reg, num_vals_reg, copy_cluster_reg, cluster_val_reg, cluster_count_reg, PNL_BRAM_dout)
+	process(state_reg, start, ready_reg, num_vals_in, PN_addr_reg, TGT_BRAM_addr, SRC_BRAM_addr, cluster_addr_reg, dist_count_reg, copy_cluster_reg, cluster_val_reg, PNL_BRAM_dout)
 	begin
 		state_next <= state_reg;
 		ready_next <= ready_reg;
 
 		PN_addr_next       <= PN_addr_reg;
-		cluster_count_next <= cluster_count_reg;
 		cluster_val_next   <= cluster_val_reg;
 		cluster_addr_next  <= cluster_addr_reg;
-		dims_count_next    <= dims_count_reg;
 		copy_cluster_next  <= copy_cluster_reg;
 		dist_count_next    <= dist_count_reg;
-		num_vals_next      <= num_vals_reg;
-		num_clusters_next  <= num_clusters_reg;
-		num_dims_next      <= num_dims_reg;
-		best_index_next    <= best_index_reg;
 
 		-- Default value is 0 -- used during memory initialization.
 		PNL_BRAM_din <= (others => '0');
@@ -136,13 +112,10 @@ begin
 
 					-- Assert 'we' to zero out the first cell at 0.
 					--PNL_BRAM_we <= "1";
-					cluster_count_next <= (others => '0');
 					copy_cluster_next  <= (others => '0');
 					dist_count_next    <= (others => '0');
 					cluster_val_next   <= (others => '0');
-					best_index_next    <= (others => '0');
-					points_addr_next   <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
-					PN_addr_next       <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
+					PN_addr_next       <= (others => '0');
 					state_next         <= get_cluster_addr;
 				end if;
 

@@ -41,9 +41,6 @@ architecture beh of CalcDistance is
 
 	signal dims_count_reg, dims_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
-	--signal received        : std_logic;
-	-- For selecting between PN or CalcAllDist portion of memory during memory accesses
-	signal do_PN_dist_addr : std_logic;
 
 	-- Stores the full 16-bit distance 
 	signal distance_val_reg, distance_val_next : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
@@ -51,8 +48,6 @@ architecture beh of CalcDistance is
 	signal p1_val_reg, p1_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal p2_val_reg, p2_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 
-	--values read from BRAM for portability of design
-	signal num_vals_reg, num_vals_next : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
 begin
 
@@ -85,7 +80,7 @@ begin
 	-- =============================================================================================
 	-- Combo logic
 	-- =============================================================================================
-	process(state_reg, start, ready_reg, PN_addr_reg, p1_val_reg, p2_val_reg, dist_sqr_reg, dims_count_reg, Num_dims, P1_addr, P2_addr, distance_val_reg, num_vals_reg, PNL_BRAM_dout)
+	process(state_reg, start, ready_reg, PN_addr_reg, p1_val_reg, p2_val_reg, dist_sqr_reg, dims_count_reg, Num_dims, P1_addr, P2_addr, distance_val_reg, PNL_BRAM_dout)
 	begin
 		state_next <= state_reg;
 		ready_next <= ready_reg;
@@ -95,14 +90,12 @@ begin
 		dist_sqr_next     <= dist_sqr_reg;
 		p1_val_next       <= p1_val_reg;
 		p2_val_next       <= p2_val_reg;
-		num_vals_next     <= num_vals_reg;
 		dims_count_next   <= dims_count_reg;
 
 		-- Default value is 0 -- used during memory initialization.
 		PNL_BRAM_din <= (others => '0');
 		PNL_BRAM_we  <= "0";
 
-		do_PN_dist_addr <= '0';
 
 		case state_reg is
 
@@ -152,16 +145,16 @@ begin
 
 			--start distance calculation
 			when get_dist =>
-				distance_val_next <= p1_val_reg - p2_val_reg;
+				distance_val_next <= sfixed(p1_val_reg - p2_val_reg,distance_val_reg);
 				state_next        <= get_sqr;
 			--square the value  separated the operations to avoid timing issues
 			when get_sqr =>
-				dist_sqr_next <= distance_val_reg * distance_val_reg;
+				dist_sqr_next <= sfixed(distance_val_reg * distance_val_reg, dist_sqr_reg);
 				state_next    <= sum_dist;
 
 			--sum distances
 			when sum_dist =>
-				distance_val_next <= distance_val_reg + dist_sqr_reg;
+				distance_val_next <= sfixed(distance_val_reg + dist_sqr_reg, distance_val_reg);
 				state_next        <= get_p1_addr;
 
 		end case;

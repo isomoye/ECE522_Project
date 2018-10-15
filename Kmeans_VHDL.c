@@ -155,7 +155,6 @@ printf("FindClosestCentroid(): Point Num %d\tclosest to centroid %d\n", point_nu
 // ===================================================================================================
 // Compute the cluster centroids by summing up all data points in each cluster along each dimension and 
 // then dividing through by the number in each cluster.
-
 void CalcClusterCentroids(int num_dims, int num_points, int num_clusters, double *Points, 
    int *cluster_assignment_index, double *new_cluster_centroids)
    {
@@ -167,6 +166,11 @@ void CalcClusterCentroids(int num_dims, int num_points, int num_clusters, double
    if ( num_dims * num_clusters > MAX_CLUSTERS )
       { printf("ERROR: CalcClusterCentroids(): Increase size of 'MAX_CLUSTERS' in program -- must be at least %d\n", num_dims * num_clusters); exit(EXIT_FAILURE); }
   
+
+
+
+
+
 // Initialize cluster centroid coordinate sums to zero.
    for ( clust_num = 0; clust_num < num_clusters; clust_num++ )
       {
@@ -175,6 +179,11 @@ void CalcClusterCentroids(int num_dims, int num_points, int num_clusters, double
       for ( dim_num = 0; dim_num < num_dims; dim_num++ )
          new_cluster_centroids[clust_num*num_dims + dim_num] = 0;
       }
+
+
+
+
+
 
 // Parse all points 
    for ( point_num = 0; point_num < num_points; point_num++ )
@@ -192,6 +201,12 @@ void CalcClusterCentroids(int num_dims, int num_points, int num_clusters, double
          new_cluster_centroids[active_cluster*num_dims + dim_num] += Points[point_num*num_dims + dim_num];
       }
       
+
+
+
+
+
+
 // Now divide each sum (in all dimensions) by number of members to find mean/centroid for each cluster
    for ( clust_num = 0; clust_num < num_clusters; clust_num++ )
       {
@@ -680,7 +695,7 @@ int main(int argc, char *argv[])
 	  
 	  
 	  
-		CopyAssignmentArray(1, (short)num_vals, hw_data); 
+		CopyAssignmentArray(1, (short)num_vals, hw_data[0]);
 		CopyAssignmentArray(1, (short)num_clusters, hw_data[1]);
 		CopyAssignmentArray(1, (short)num_dims, hw_data[2]);		
 		CopyAssignmentArray(num_points*num_dims, points_short, hw_data[3]); 
