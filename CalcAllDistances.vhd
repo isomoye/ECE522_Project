@@ -23,9 +23,9 @@ entity CalcAllDistance is
 		calcDist_ready : in  std_logic;
 		P1_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		P2_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Vals       : in std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-       Num_Clusters       : in std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-       Num_Dims       : in std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Vals       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Clusters   : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Dims       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		CalcDist_dout  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
 	);
 end CalcAllDistance;
@@ -40,6 +40,7 @@ architecture beh of CalcAllDistance is
 	signal PN_addr_reg, PN_addr_next               : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal points_addr_reg, points_addr_next       : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal centroids_addr_reg, centroids_addr_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal centroids_base_reg, centroids_base_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal dist_addr_reg, dist_addr_next           : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	--   signal points_addr_reg, points_addr_next: unsigned(PNL_BRAM_ADDR_SIZE_NB-1 downto 0);
 
@@ -70,7 +71,8 @@ begin
 			PN_addr_reg        <= (others => '0');
 			points_addr_reg    <= (others => '0');
 			centroids_addr_reg <= (others => '0');
-            dist_addr_reg <= (others => '0');
+			centroids_base_reg <= (others => '0');
+			dist_addr_reg      <= (others => '0');
 			distance_val_reg   <= (others => '0');
 			cluster_count_reg  <= (others => '0');
 			dist_count_reg     <= (others => '0');
@@ -81,8 +83,9 @@ begin
 			points_addr_reg    <= points_addr_next;
 			cluster_count_reg  <= cluster_count_next;
 			centroids_addr_reg <= centroids_addr_next;
+			centroids_base_reg <= centroids_base_next;
 			distance_val_reg   <= distance_val_next;
-            dist_addr_reg      <= dist_addr_next;
+			dist_addr_reg      <= dist_addr_next;
 			dist_count_reg     <= dist_count_next;
 		end if;
 	end process;
@@ -99,6 +102,7 @@ begin
 		PN_addr_next        <= PN_addr_reg;
 		points_addr_next    <= points_addr_reg;
 		centroids_addr_next <= centroids_addr_reg;
+		centroids_base_next <= centroids_base_reg;
 		dist_addr_next      <= dist_addr_reg;
 		distance_val_next   <= distance_val_reg;
 		cluster_count_next  <= cluster_count_reg;
@@ -131,6 +135,7 @@ begin
 					distance_val_next   <= (others => '0');
 					dist_count_next     <= (others => '0');
 					centroids_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
+					centroids_base_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + (unsigned(Num_Vals) * unsigned(num_dims) + TO_UNSIGNED(PROG_VALS, PNL_BRAM_ADDR_SIZE_NB)), PNL_BRAM_ADDR_SIZE_NB);
 					points_addr_next    <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
 					PN_addr_next        <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
 					state_next          <= get_point_addr;
@@ -138,7 +143,7 @@ begin
 
 			when get_point_addr =>
 
-				if (dist_count_reg = unsigned(Num_Vals) -1) then
+				if (dist_count_reg >= unsigned(Num_Vals) - 1) then
 					state_next <= idle;
 
 				else
@@ -149,12 +154,12 @@ begin
 			-- =====================
 			-- get bram address of current centroid.
 			when get_cluster_addr =>
-				if (cluster_count_reg = unsigned(Num_Clusters) - 1) then
+				if (cluster_count_reg >= unsigned(Num_Clusters) - 1) then
 					cluster_count_next <= (others => '0');
 					dist_count_next    <= dist_count_reg + 1;
 					state_next         <= get_point_addr;
 				else
-					centroids_addr_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + (cluster_count_reg * unsigned(Num_Dims)) + (unsigned(Num_Vals) * unsigned(Num_Dims)) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
+					centroids_addr_next <= resize(centroids_base_reg + (cluster_count_reg * unsigned(Num_Dims)), PNL_BRAM_ADDR_SIZE_NB);
 					--PN_addr_next        <= points_addr_reg;
 					state_next          <= start_calcDist;
 				end if;
@@ -173,7 +178,7 @@ begin
 					dist_addr_next     <= resize(to_unsigned(DIST_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + ((dist_count_reg * unsigned(Num_Clusters)) + cluster_count_reg), PNL_BRAM_ADDR_SIZE_NB);
 					cluster_count_next <= cluster_count_reg + 1;
 					state_next         <= get_cluster_addr;
-                end if;
+				end if;
 
 		end case;
 	end process;

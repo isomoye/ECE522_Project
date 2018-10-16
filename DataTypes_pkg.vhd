@@ -63,10 +63,10 @@ package DataTypes_pkg is
 
 	-- Kmeans range
 	constant DIST_BRAM_BASE            : integer := 10240;
-	constant DIST_BRAM_UPPER_LIMIT     : integer := 12288;
+	--constant DIST_BRAM_UPPER_LIMIT     : integer := 12288;
 	constant CLUSTER_BASE_ADDR         : integer := 8192;
-	constant COPY_CLUSTER_BASE_ADDR    : integer := 6144;
-	constant CENTROIDS_BASE_ADDR       : integer := 4096;
+	constant COPY_CLUSTER_BASE_ADDR    : integer := 4096;
+	--constant CENTROIDS_BASE_ADDR       : integer := 4096;
 	constant FINAL_CLUSTER_UPPER_LIMIT : integer := 4096 / 2;
 	constant FINAL_CLUSTER_BASE_ADDR   : integer := 0;
 

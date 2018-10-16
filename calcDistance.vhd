@@ -41,13 +41,11 @@ architecture beh of CalcDistance is
 
 	signal dims_count_reg, dims_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
-
 	-- Stores the full 16-bit distance 
 	signal distance_val_reg, distance_val_next : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal dist_sqr_reg, dist_sqr_next         : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal p1_val_reg, p1_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
 	signal p2_val_reg, p2_val_next             : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
-
 
 begin
 
@@ -96,7 +94,6 @@ begin
 		PNL_BRAM_din <= (others => '0');
 		PNL_BRAM_we  <= "0";
 
-
 		case state_reg is
 
 			-- =====================
@@ -108,7 +105,6 @@ begin
 
 					-- Zero the register that will store distances
 					distance_val_next <= (others => '0');
-					distance_val_next <= (others => '0');
 					dist_sqr_next     <= (others => '0');
 					p1_val_next       <= (others => '0');
 					p2_val_next       <= (others => '0');
@@ -119,7 +115,7 @@ begin
 
 			--check exit condition and convert first address
 			when get_p1_addr =>
-				if (dims_count_reg = unsigned(Num_dims) - 1) then
+				if (dims_count_reg >= unsigned(Num_dims) - 1) then
 					dims_count_next <= (others => '0');
 					CalcDist_dout   <= std_logic_vector(distance_val_reg);
 					state_next      <= idle;
@@ -145,16 +141,17 @@ begin
 
 			--start distance calculation
 			when get_dist =>
-				distance_val_next <= sfixed(p1_val_reg - p2_val_reg,distance_val_reg);
+				distance_val_next <= p1_val_reg - p2_val_reg, distance_val_reg;
 				state_next        <= get_sqr;
 			--square the value  separated the operations to avoid timing issues
 			when get_sqr =>
-				dist_sqr_next <= sfixed(distance_val_reg * distance_val_reg, dist_sqr_reg);
+				dist_sqr_next <= distance_val_reg * distance_val_reg;
 				state_next    <= sum_dist;
 
 			--sum distances
 			when sum_dist =>
-				distance_val_next <= sfixed(distance_val_reg + dist_sqr_reg, distance_val_reg);
+				distance_val_next <= distance_val_reg + dist_sqr_reg;
+				dims_count_next   <= dims_count_reg + 1;
 				state_next        <= get_p1_addr;
 
 		end case;
