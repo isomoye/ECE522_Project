@@ -19,9 +19,9 @@ entity FindClosestCentroid is
 		PNL_BRAM_addr : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		PNL_BRAM_din  : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-		Num_Vals      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Clusters  : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Dims      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Vals      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Clusters  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Dims      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_we   : out std_logic_vector(0 to 0)
 	);
 end FindClosestCentroid;

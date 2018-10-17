@@ -40,7 +40,7 @@ package DataTypes_pkg is
 	constant WORD_SIZE_NB : integer := 16;
 
 	-- BRAM SIZES: PNL is currently 16384 bytes with 16-bit words. 
-	constant PNL_BRAM_ADDR_SIZE_NB   : integer := 15;
+	constant PNL_BRAM_ADDR_SIZE_NB   : integer := 13;
 	constant PNL_BRAM_DBITS_WIDTH_LB : integer := PN_SIZE_LB;
 	constant PNL_BRAM_DBITS_WIDTH_NB : integer := PN_SIZE_NB;
 	constant PNL_BRAM_NUM_WORDS_NB   : integer := 2**PNL_BRAM_ADDR_SIZE_NB;
@@ -58,21 +58,25 @@ package DataTypes_pkg is
 	constant LARGEST_NEG_VAL : integer := -16383;
 
 	-- We store the raw data in the upper half of memory (locations 4096 to 8191). 
-	constant PN_BRAM_BASE   : integer := 24576;
+	constant PN_BRAM_BASE   : integer := 6144;
 	constant PN_UPPER_LIMIT : integer := PNL_BRAM_NUM_WORDS_NB;
 
 	-- Kmeans range
-	constant DIST_BRAM_BASE            : integer := 10240;
+	constant DIST_BRAM_BASE            : integer := 4096;
 	--constant DIST_BRAM_UPPER_LIMIT     : integer := 12288;
-	constant CLUSTER_BASE_ADDR         : integer := 8192;
-	constant COPY_CLUSTER_BASE_ADDR    : integer := 4096;
+	constant CLUSTER_BASE_ADDR         : integer := 3072;
+	constant COPY_CLUSTER_BASE_ADDR    : integer := 2048;
 	--constant CENTROIDS_BASE_ADDR       : integer := 4096;
-	constant FINAL_CLUSTER_UPPER_LIMIT : integer := 4096 / 2;
+	constant FINAL_CLUSTER_UPPER_LIMIT : integer := 2048;
 	constant FINAL_CLUSTER_BASE_ADDR   : integer := 0;
 
 	constant NUM_VALS_ADDR     : integer := 0;
 	constant NUM_CLUSTERS_ADDR : integer := 1;
 	constant NUM_DIMS_ADDR     : integer := 2;
+
+	constant DEFAULT_VALS     : integer := 600;
+	constant DEFAULT_CLUSTERS : integer := 15;
+	constant DEFAULT_DIMS     : integer := 2;
 
 	constant MAX_ITERATIONS : integer := 100;
 

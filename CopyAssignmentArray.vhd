@@ -19,7 +19,7 @@ entity CopyAssignmentArray is
 		PNL_BRAM_din  : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_we   : out std_logic_vector(0 to 0);
-		Num_Vals      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Vals      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		SRC_BRAM_addr : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		TGT_BRAM_addr : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0)
 	);
@@ -115,6 +115,7 @@ begin
 					state_next        <= get_cluster_addr;
 				end if;
 
+			-- set src addr
 			when get_cluster_addr =>
 
 				if (dist_count_reg >= (unsigned(Num_Vals) - 1)) then
@@ -127,11 +128,12 @@ begin
 				end if;
 
 			-- =====================
-			-- get bram address of current centroid.
+			-- get src data
 			when get_cluster_val =>
 				cluster_val_next <= unsigned(PNL_BRAM_dout);
 				state_next       <= store_val;
-			-- get p1 value
+
+			-- store data in targer addr
 			when store_val =>
 				PNL_BRAM_din       <= std_logic_vector(cluster_val_reg);
 				PNL_BRAM_we        <= "1";

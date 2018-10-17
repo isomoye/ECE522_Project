@@ -19,7 +19,7 @@ entity CalcDistance is
 		PNL_BRAM_addr : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		P1_addr       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		P2_addr       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_dims      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_dims      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		CalcDist_dout : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_din  : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
@@ -115,7 +115,7 @@ begin
 
 			--check exit condition and convert first address
 			when get_p1_addr =>
-				if (dims_count_reg >= unsigned(Num_dims) - 1) then
+				if (dims_count_reg = unsigned(Num_dims) - 1) then
 					dims_count_next <= (others => '0');
 					CalcDist_dout   <= std_logic_vector(distance_val_reg);
 					state_next      <= idle;
@@ -141,7 +141,7 @@ begin
 
 			--start distance calculation
 			when get_dist =>
-				distance_val_next <= p1_val_reg - p2_val_reg, distance_val_reg;
+				distance_val_next <= p1_val_reg - p2_val_reg;
 				state_next        <= get_sqr;
 			--square the value  separated the operations to avoid timing issues
 			when get_sqr =>

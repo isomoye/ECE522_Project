@@ -56,8 +56,10 @@ architecture beh of Kmeans is
 
 	signal Kmeans_ERR_reg, Kmeans_ERR_next : std_logic;
 
-	--calcDist_start
-	--calcDist_ready
+	-- in case we want to read "out" values
+	signal PNL_BRAM_addr_out : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	signal PNL_BRAM_din_out  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+
 	--signals for CalAllDistances module
 	signal CalAllDistance_start     : std_logic;
 	signal CalAllDistance_ready     : std_logic;
@@ -68,6 +70,7 @@ architecture beh of Kmeans is
 	signal CalAllDistance_P1_addr   : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal CalAllDistance_P2_addr   : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
+	--signals for Check_assigns module
 	signal Check_assigns_start            : std_logic;
 	signal Check_assigns_ready            : std_logic;
 	signal Check_assigns_BRAM_addr        : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
@@ -77,6 +80,7 @@ architecture beh of Kmeans is
 	signal Check_TGT_addr, Check_TGT_next : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal Change_Count_dout              : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
+	--signals for copy module
 	signal Copy_start                   : std_logic;
 	signal Copy_ready                   : std_logic;
 	signal Copy_BRAM_addr               : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
@@ -85,14 +89,14 @@ architecture beh of Kmeans is
 	signal Copy_SRC_addr, Copy_SRC_next : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal Copy_TGT_addr, Copy_TGT_next : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
+	--signals for cluster center calculator module
 	signal CalcCluster_start     : std_logic;
 	signal CalcCluster_ready     : std_logic;
 	signal CalcCluster_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal CalcCluster_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 	signal CalcCluster_BRAM_we   : std_logic_vector(0 to 0);
-	-- Error flag is set to '1' if distribution is too narrow to be characterized with the specified bounds, or the integer portion of
-	-- a PN value is outside the range of -1023 and 1024.
 
+	--signals for Distance calculator module
 	signal Calc_Distance_start         : std_logic;
 	signal Calc_Distance_ready         : std_logic;
 	signal Calc_Distance_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
@@ -102,6 +106,7 @@ architecture beh of Kmeans is
 	signal Calc_Distance_BRAM_din      : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 	signal Calc_Distance_BRAM_we       : std_logic_vector(0 to 0);
 
+	-- signals for total distance calculator module
 	signal CalcTotal_start         : std_logic;
 	signal CalcTotal_ready         : std_logic;
 	signal CalcTotal_BRAM_addr     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
@@ -112,29 +117,33 @@ architecture beh of Kmeans is
 	signal CalcTotal_Dist_start    : std_logic;
 	signal CalcTotal_CalcDist_dout : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
+	-- signals for find_centroids module
 	signal Find_Centroid_start     : std_logic;
 	signal Find_Centroid_ready     : std_logic;
 	signal Find_Centroid_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal Find_Centroid_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 	signal Find_Centroid_BRAM_we   : std_logic_vector(0 to 0);
 
+	--signal for addressing number of values,cluster,dimensions
 	signal Kmeans_BRAM_addr : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-	--signal Kmeans_Centroid_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-	--signal Kmeans_Centroid_BRAM_we   : std_logic_vector(0 to 0);
+	signal Kmeans_BRAM_din  : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Kmeans_BRAM_we   : std_logic_vector(0 to 0);
 
 	-- registers for iterations, prev_totD and cur_todD.
 	signal dist_count_reg, dist_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
-	signal Num_Vals     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-	signal Num_Clusters : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-	signal Num_Dims     : std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+	--signals for getting number of values, clusters, dimensions
+	signal Num_Vals     : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Num_Clusters : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+	signal Num_Dims     : std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
+	-- value holders for total distance calculation
 	signal tot_D_reg, tot_D_next           : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 	signal prev_tot_D_reg, prev_tot_D_next : unsigned(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 
+	-- signals for module control flow
 	type myEnum is (a, b, c, d);
 	signal copy_select_reg, copy_select_next       : myEnum;
-	--	signal copy_select         : std_logic_vector(1 downto 0);
 	signal CalcAll_select_reg, CalcAll_select_next : myEnum;
 	signal Cluster_select_reg, Cluster_select_next : myEnum;
 	signal calcDist_select                         : myEnum;
@@ -142,6 +151,7 @@ architecture beh of Kmeans is
 
 begin
 
+	-- calc all distances module
 	CalcAllDistanceMod : entity work.CalcAllDistance(beh)
 		port map(
 			Clk            => Clk,
@@ -161,6 +171,7 @@ begin
 			Num_dims       => Num_dims
 		);
 
+	--calc cluster centroids module
 	CalcCentroidsMod : entity work.CalcClusterCentroids(beh)
 		port map(
 			Clk           => Clk,
@@ -176,6 +187,7 @@ begin
 			Num_Dims      => Num_Dims
 		);
 
+	--calc distance module
 	CalcDistMod : entity work.CalcDistance(beh)
 		port map(
 			Clk           => Clk,
@@ -192,6 +204,7 @@ begin
 			PNL_BRAM_we   => Calc_Distance_BRAM_we
 		);
 
+	--calc total distance module
 	CalcTotalMod : entity work.CalcTotalDistance(beh)
 		port map(
 			Clk                    => Clk,
@@ -212,6 +225,7 @@ begin
 			Num_Vals               => Num_Vals
 		);
 
+	--check count change module
 	Check_assignsMod : entity work.CheckIfAssignmentCountChanged(beh)
 		port map(
 			Clk               => Clk,
@@ -228,6 +242,7 @@ begin
 			Change_Count_dout => Change_Count_dout
 		);
 
+	--copy values module
 	CopyAssignMod : entity work.CopyAssignmentArray(beh)
 		port map(
 			Num_Vals      => Num_vals,
@@ -243,6 +258,7 @@ begin
 			TGT_BRAM_addr => Copy_TGT_addr
 		);
 
+	-- find closest centroid module
 	FindCentroidMod : entity work.FindClosestCentroid(beh)
 		port map(
 			Clk           => Clk,
@@ -303,16 +319,18 @@ begin
 		KMEANS_BRAM_select_next <= KMEANS_BRAM_select_reg;
 
 		-- Default value is 0 -- used during memory initialization.
-		PNL_BRAM_din <= (others => '0');
-		PNL_BRAM_we  <= "0";
+		--PNL_BRAM_din <= (others => '0');
+		--PNL_BRAM_we  <= "0";
 
 		CalAllDistance_start <= '0';
 		CalcCluster_start    <= '0';
-		Calc_Distance_start  <= '0';
+		--Calc_Distance_start  <= '0';
 		CalCTotal_start      <= '0';
 		Check_assigns_start  <= '0';
 		Copy_start           <= '0';
 		Find_Centroid_start  <= '0';
+		Kmeans_BRAM_din      <= (others => '0');
+		Kmeans_BRAM_we       <= "0";
 		--KMEANS_BRAM_select          <= "00";
 
 		tot_D_next      <= tot_D_reg;
@@ -334,9 +352,10 @@ begin
 					Cluster_select_next     <= a;
 					dist_count_next         <= (others => '0');
 					KMEANS_BRAM_select_next <= kmeans;
-					Num_Clusters            <= (others => '0');
-					Num_Vals                <= (others => '0');
-					Num_Dims                <= (others => '0');
+					Kmeans_BRAM_addr        <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB));
+					Num_Clusters            <= std_logic_vector(to_unsigned(DEFAULT_CLUSTERS, PNL_BRAM_DBITS_WIDTH_NB));
+					Num_Vals                <= std_logic_vector(to_unsigned(DEFAULT_VALS, PNL_BRAM_DBITS_WIDTH_NB));
+					Num_Dims                <= std_logic_vector(to_unsigned(DEFAULT_DIMS, PNL_BRAM_DBITS_WIDTH_NB));
 					tot_D_next              <= (others => '0');
 					calcDist_select         <= a;
 					prev_tot_D_next         <= (others => '0');
@@ -344,31 +363,37 @@ begin
 					Check_SRC_next          <= (others => '0');
 				end if;
 
+			-- start getting number of values for point,clusters,dims.
 			when get_prog_addr =>
+				--if at a point address: start and go to calcAll, give calcAll control of BRAM
 				if (dist_count_reg = to_unsigned(PROG_VALS, PNL_BRAM_ADDR_SIZE_NB - 1)) then
-					dist_count_next         <= (others => '0');
+					dist_count_next <= (others => '0');
+
 					KMEANS_BRAM_select_next <= calcAll;
 					CalAllDistance_start    <= '1';
 					calcDist_select         <= a;
 					state_next              <= wait_calcAll;
 
 				else
+					-- set the BRAM addr
 					Kmeans_BRAM_addr <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + dist_count_reg);
 					state_next       <= get_prog_vals;
 				end if;
 
+			-- checks value of count and sets BRAM output to the correct register
 			when get_prog_vals =>
 				if (dist_count_reg = to_unsigned(NUM_VALS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
-					Num_Vals <= std_logic_vector(resize(unsigned(PNL_BRAM_dout), PNL_BRAM_ADDR_SIZE_NB));
+				--Num_Vals <= PNL_BRAM_dout;
 				elsif (dist_count_reg = to_unsigned(NUM_CLUSTERS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
-					Num_Clusters <= std_logic_vector(resize(unsigned(PNL_BRAM_dout), PNL_BRAM_ADDR_SIZE_NB));
+				--Num_Clusters <= PNL_BRAM_dout;
 				elsif (dist_count_reg = to_unsigned(NUM_DIMS_ADDR, PNL_BRAM_ADDR_SIZE_NB)) then
-					Num_Dims <= std_logic_vector(resize(unsigned(PNL_BRAM_dout), PNL_BRAM_ADDR_SIZE_NB));
+					--Num_Dims <= PNL_BRAM_dout;
 				end if;
 
 				dist_count_next <= dist_count_reg + 1;
 				state_next      <= get_prog_addr;
-
+			-- wait for calcAll to finish, since calcDist is started within calcAll ,if calcDist is started give it control of BRAM
+			-- else keep control of BRAM to calcAll
 			when wait_calcAll =>
 				if (CalAllDistance_ready = '1') then
 					KMEANS_BRAM_select_next <= findCentroid;
@@ -377,12 +402,13 @@ begin
 				else
 					if (Calc_Distance_ready = '0') then
 						KMEANS_BRAM_select_next <= calcDist;
-					--	Top_Num_dims       <= CalAllDistance_Num_dims;
 					else
 						KMEANS_BRAM_select_next <= calcAll;
 					end if;
 				end if;
 
+			-- wait for find centroid, if its outside the while loop then go to copy
+			-- otherwise go to wait change count
 			when wait_find_centroid =>
 				if (Find_Centroid_ready = '1') then
 					case CalcAll_select_reg is
@@ -391,11 +417,9 @@ begin
 							Copy_SRC_next           <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB));
 							Copy_TGT_next           <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 							KMEANS_BRAM_select_next <= copy;
-							--Copy_Num_vals_in   <= std_logic_vector(Num_dims);
-							state_next              <= wait_copy; --wait_copy;
+							state_next              <= wait_copy;
 						when others =>
 							Check_assigns_start     <= '1';
-							--Check_assigns_Num_Vals      <= std_logic_vector(Num_dims);
 							Check_SRC_next          <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 							Check_TGT_next          <= std_logic_vector(to_unsigned(COPY_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 							KMEANS_BRAM_select_next <= checkAssigns;
@@ -403,6 +427,9 @@ begin
 					end case;
 				end if;
 
+			-- wait for copy to finish
+			-- chose next stat based on copy select
+			-- wait_copy is the exit control
 			when wait_copy =>
 				if (Copy_ready = '1') then
 					--state_next <= idle;
@@ -425,7 +452,7 @@ begin
 					end case;
 				end if;
 
-			--00 a 01b 10c 11d 
+			--starts the while loop, count until Max_iterations 
 			when start_iteration =>
 				if (dist_count_reg = to_unsigned(MAX_ITERATIONS, PNL_BRAM_ADDR_SIZE_NB)) then
 					Copy_start              <= '1';
@@ -450,7 +477,7 @@ begin
 							state_next              <= wait_total;
 						when others =>
 							Copy_start              <= '1';
-							Copy_SRC_next           <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB));
+							Copy_SRC_next           <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 							Copy_TGT_next           <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 							KMEANS_BRAM_select_next <= copy;
 							copy_select_next        <= d;
@@ -466,12 +493,12 @@ begin
 				else
 					if (Calc_Distance_ready = '0') then
 						KMEANS_BRAM_select_next <= calcDist;
-					--	Top_Num_dims       <= CalAllDistance_Num_dims;
 					else
 						KMEANS_BRAM_select_next <= calcTotal;
 					end if;
 				end if;
 
+			-- check if we failed to improve
 			when fail_improve =>
 
 				if (dist_count_reg /= (dist_count_reg'range => '0') and tot_D_reg > prev_tot_D_reg) then
@@ -489,11 +516,12 @@ begin
 				end if;
 				state_next <= wait_copy;
 
+			-- wait for change count module to finish
 			when wait_change_count =>
 				if (Check_assigns_ready = '1') then
 					if (Change_Count_dout = (Change_Count_dout'range => '0')) then
 						Copy_start              <= '1';
-						Copy_SRC_next           <= std_logic_vector(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB));
+						Copy_SRC_next           <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 						Copy_TGT_next           <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
 						KMEANS_BRAM_select_next <= copy;
 						copy_select_next        <= d;
@@ -512,7 +540,7 @@ begin
 
 	Kmeans_ERR <= Kmeans_ERR_reg;
 
-	with KMEANS_BRAM_select_reg select PNL_BRAM_addr <=
+	with KMEANS_BRAM_select_reg select PNL_BRAM_addr_out <=
 		Kmeans_BRAM_addr when kmeans,
 		CalAllDistance_BRAM_addr when calcAll,
 		Calc_Distance_BRAM_addr 	when calcDist,
@@ -522,8 +550,8 @@ begin
 		CalcTotal_BRAM_addr 		when calcTotal,
 		Check_assigns_BRAM_addr 	when checkAssigns;
 
-	with KMEANS_BRAM_select_reg select PNL_BRAM_din <=
-		(others => '1') when kmeans,
+	with KMEANS_BRAM_select_reg select PNL_BRAM_din_out <=
+		Kmeans_BRAM_din when kmeans,
 		CalAllDistance_BRAM_din when calcAll,      
 		Calc_Distance_BRAM_din 		when calcDist,     
 		Find_Centroid_BRAM_din 		when findCentroid, 
@@ -533,7 +561,7 @@ begin
 		Check_assigns_BRAM_din  	when checkAssigns;
 
 	with KMEANS_BRAM_select_reg select PNL_BRAM_we <=
-		(others => '0') when kmeans,
+		Kmeans_BRAM_we when kmeans,
 		CalAllDistance_BRAM_we when calcAll,      
 		Calc_Distance_BRAM_we	when calcDist,     
 		Find_Centroid_BRAM_we 	when findCentroid, 
@@ -553,6 +581,9 @@ begin
 	with calcDist_select select Calc_Distance_P2_addr <=
 		CalAllDistance_P2_addr when a,
 		CalCTotal_P2_addr when others;
+
+	PNL_BRAM_addr <= PNL_BRAM_addr_out;
+	PNL_BRAM_din  <= PNL_BRAM_din_out;
 
 	ready <= ready_reg;
 

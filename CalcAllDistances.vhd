@@ -23,9 +23,9 @@ entity CalcAllDistance is
 		calcDist_ready : in  std_logic;
 		P1_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		P2_addr        : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Vals       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Clusters   : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Dims       : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Vals       : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Clusters   : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Dims       : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		CalcDist_dout  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
 	);
 end CalcAllDistance;
@@ -49,14 +49,11 @@ architecture beh of CalcAllDistance is
 	signal dist_count_reg, dist_count_next       : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 	signal cluster_count_reg, cluster_count_next : unsigned(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 
-	--signal received        : std_logic;
 	-- For selecting between PN or CalcAllDist portion of memory during memory accesses
 	signal do_PN_dist_addr : std_logic;
 
 	-- Stores the full 16-bit distance 
 	signal distance_val_reg, distance_val_next : sfixed(PN_INTEGER_NB - 1 downto -PN_PRECISION_NB);
-
-	--values read from BRAM for portability of design
 
 begin
 
@@ -94,7 +91,7 @@ begin
 	-- Combo logic
 	-- =============================================================================================
 
-	process(state_reg, start, ready_reg, points_addr_reg, calcDist_ready, CalcDist_dout, centroids_addr_reg, cluster_count_reg, dist_addr_reg, PN_addr_reg, dist_count_reg, distance_val_reg, Num_Vals, Num_Clusters, Num_Dims)
+	process(state_reg, start, ready_reg, centroids_base_reg, points_addr_reg, calcDist_ready, CalcDist_dout, centroids_addr_reg, cluster_count_reg, dist_addr_reg, PN_addr_reg, dist_count_reg, distance_val_reg, Num_Vals, Num_Clusters, Num_Dims)
 	begin
 		state_next <= state_reg;
 		ready_next <= ready_reg;
@@ -112,6 +109,8 @@ begin
 		PNL_BRAM_din <= (others => '0');
 		PNL_BRAM_we  <= "0";
 
+		calcDist_start <= '0';
+
 		do_PN_dist_addr <= '0';
 
 		case state_reg is
@@ -124,12 +123,7 @@ begin
 					ready_next <= '0';
 
 					-- Zero the register that will store distances
-					distance_val_next <= (others => '0');
-
-					-- Allow CalcAllDist_addr to drive PNL_BRAM
-					--do_PN_dist_addr <= '1';
-
-					-- Assert 'we' to zero out the first cell at 0.
+					distance_val_next   <= (others => '0');
 					dist_addr_next      <= (others => '0');
 					cluster_count_next  <= (others => '0');
 					distance_val_next   <= (others => '0');
@@ -141,6 +135,7 @@ begin
 					state_next          <= get_point_addr;
 				end if;
 
+			-- get address of point
 			when get_point_addr =>
 
 				if (dist_count_reg >= unsigned(Num_Vals) - 1) then
@@ -163,13 +158,15 @@ begin
 					--PN_addr_next        <= points_addr_reg;
 					state_next          <= start_calcDist;
 				end if;
-			-- get p1 value
+			-- start the distance calculator
+			-- set addresses for calcDist
 			when start_calcDist =>
 				P1_addr        <= std_logic_vector(points_addr_reg);
 				P2_addr        <= std_logic_vector(centroids_addr_reg);
 				calcDist_start <= '1';
 				state_next     <= wait_calcDist;
 
+			--wait for the distance calc, then store output in distance assigned memory location
 			when wait_calcDist =>
 				if (calcDist_ready = '1') then
 					do_PN_dist_addr    <= '1';

@@ -26,8 +26,8 @@ entity CalcTotalDistance is
 		P2_addr                : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		CalcDist_dout          : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		CalcTotalDistance_dout : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
-		Num_Vals               : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Dims               : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0)
+		Num_Vals               : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Dims               : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
 	);
 end CalcTotalDistance;
 
@@ -99,6 +99,8 @@ begin
 		PNL_BRAM_din <= (others => '0');
 		PNL_BRAM_we  <= "0";
 
+		calcDist_start <= '0';
+
 		case state_reg is
 
 			-- =====================
@@ -119,28 +121,35 @@ begin
 				end if;
 
 			when get_point_addr =>
-
+				-- iterate through points
 				if (dist_count_reg = unsigned(Num_Vals) - 1) then
+					--store final value and go to idle
 					CalcTotalDistance_dout <= std_logic_vector(tot_D_reg);
 					state_next             <= idle;
 
 				else
+					--get point addr
 					points_addr_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + unsigned(dist_count_reg * unsigned(Num_Dims)) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
 					PN_addr_next     <= to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB) + dist_count_reg;
 					state_next       <= start_calcDist;
 				end if;
 
 			when get_cluster_addr =>
+				-- get point value to index centroid with.
 				centroids_addr_next <= resize(centroids_base_reg + unsigned(PNL_BRAM_dout), PNL_BRAM_ADDR_SIZE_NB);
 				state_next          <= start_calcDist;
 
 			when start_calcDist =>
+				--set addresses for caldDist
+				--start calcDist
 				P1_addr        <= std_logic_vector(points_addr_reg);
 				P2_addr        <= std_logic_vector(centroids_addr_reg);
 				calcDist_start <= '1';
 				state_next     <= wait_calcDist;
 
 			when wait_calcDist =>
+				-- convert to fixed point and do addition
+				-- increment points counter
 				if (calcDist_ready = '1') then
 					tot_D_next      <= tot_D_reg + to_sfixed(CalcDist_dout, PN_INTEGER_NB, -PN_PRECISION_NB);
 					dist_count_next <= dist_count_reg + 1;

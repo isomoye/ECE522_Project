@@ -73,7 +73,7 @@ architecture STRUCTURE of design_1_wrapper is
 			FIXED_IO_ps_porb  : inout STD_LOGIC;
 			GPIO_Ins_tri_i    : in    STD_LOGIC_VECTOR(31 downto 0);
 			GPIO_Outs_tri_o   : out   STD_LOGIC_VECTOR(31 downto 0);
-			PNL_BRAM_addr     : in    STD_LOGIC_VECTOR(14 downto 0);
+			PNL_BRAM_addr     : in    STD_LOGIC_VECTOR(12 downto 0);
 			PNL_BRAM_din      : in    STD_LOGIC_VECTOR(15 downto 0);
 			PNL_BRAM_dout     : out   STD_LOGIC_VECTOR(15 downto 0);
 			PNL_BRAM_we       : in    STD_LOGIC_VECTOR(0 to 0);
@@ -88,7 +88,7 @@ architecture STRUCTURE of design_1_wrapper is
 			PS_RESET_N    : in  std_logic;
 			GPIO_Ins      : in  std_logic_vector(31 downto 0);
 			GPIO_Outs     : out std_logic_vector(31 downto 0);
-			PNL_BRAM_addr : out std_logic_vector(14 downto 0);
+			PNL_BRAM_addr : out std_logic_vector(12 downto 0);
 			PNL_BRAM_din  : out std_logic_vector(15 downto 0);
 			PNL_BRAM_dout : in  std_logic_vector(15 downto 0);
 			PNL_BRAM_we   : out std_logic_vector(0 to 0);
@@ -101,7 +101,7 @@ architecture STRUCTURE of design_1_wrapper is
 	signal FCLK_RESET0_N : STD_LOGIC;
 	signal GPIO_Ins      : STD_LOGIC_VECTOR(31 downto 0);
 	signal GPIO_Outs     : STD_LOGIC_VECTOR(31 downto 0);
-	signal PNL_BRAM_addr : STD_LOGIC_VECTOR(14 downto 0);
+	signal PNL_BRAM_addr : STD_LOGIC_VECTOR(12 downto 0);
 	signal PNL_BRAM_din  : STD_LOGIC_VECTOR(15 downto 0);
 	signal PNL_BRAM_dout : STD_LOGIC_VECTOR(15 downto 0);
 	signal PNL_BRAM_we   : STD_LOGIC_VECTOR(0 to 0);
@@ -133,7 +133,7 @@ begin
 			FIXED_IO_ps_srstb            => FIXED_IO_ps_srstb,
 			GPIO_Ins_tri_i(31 downto 0)  => GPIO_Ins(31 downto 0),
 			GPIO_Outs_tri_o(31 downto 0) => GPIO_Outs(31 downto 0),
-			PNL_BRAM_addr(14 downto 0)   => PNL_BRAM_addr(14 downto 0),
+			PNL_BRAM_addr(12 downto 0)   => PNL_BRAM_addr(12 downto 0),
 			PNL_BRAM_din(15 downto 0)    => PNL_BRAM_din(15 downto 0),
 			PNL_BRAM_dout(15 downto 0)   => PNL_BRAM_dout(15 downto 0),
 			PNL_BRAM_we(0)               => PNL_BRAM_we(0)

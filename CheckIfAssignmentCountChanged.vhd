@@ -19,7 +19,7 @@ entity CheckIfAssignmentCountChanged is
 		PNL_BRAM_din      : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_dout     : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_we       : out std_logic_vector(0 to 0);
-		Num_Vals          : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
+		Num_Vals          : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		SRC_BRAM_addr     : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		TGT_BRAM_addr     : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		Change_Count_dout : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
@@ -124,31 +124,34 @@ begin
 				end if;
 
 			when get_p1_addr =>
-
+				-- loop through points
 				if (dist_count_reg = unsigned(Num_Vals) - 1) then
+					--set final output
 					Change_Count_dout <= std_logic_vector(change_count_reg);
 					state_next        <= idle;
 				else
+					--get first point addr
 					PN_addr_next <= unsigned(SRC_BRAM_addr) + dist_count_reg;
 					state_next   <= get_p1_val;
 				end if;
 
 			-- =====================
-			-- get bram address of current centroid.
+			-- store first value
 			when get_p1_val =>
 				cluster_val_next <= unsigned(PNL_BRAM_dout);
 				state_next       <= get_p2_addr;
-
+			-- get addr of second value				
 			when get_p2_addr =>
 				PN_addr_next <= unsigned(TGT_BRAM_addr) + dist_count_reg;
 				state_next   <= get_p2_val;
 
 			-- =====================
-			-- get bram address of current centroid.
+			-- get second value
 			when get_p2_val =>
-				cluster_val_next <= unsigned(PNL_BRAM_dout);
-				state_next       <= change_count;
-			-- get p1 value
+				copy_cluster_next <= unsigned(PNL_BRAM_dout);
+				state_next        <= change_count;
+
+			-- check to see if count changed
 			when change_count =>
 
 				if (cluster_addr_reg /= copy_cluster_reg) then

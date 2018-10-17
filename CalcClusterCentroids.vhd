@@ -20,9 +20,9 @@ entity CalcClusterCentroids is
 		PNL_BRAM_din  : out std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_dout : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
 		PNL_BRAM_we   : out std_logic_vector(0 to 0);
-		Num_Vals      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Clusters  : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
-		Num_Dims      : in  std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0)
+		Num_Vals      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Clusters  : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0);
+		Num_Dims      : in  std_logic_vector(PNL_BRAM_DBITS_WIDTH_NB - 1 downto 0)
 	);
 end CalcClusterCentroids;
 
@@ -175,7 +175,7 @@ begin
 						cluster_count_next <= (others => '0');
 						dist_count_next    <= (others => '0');
 						state_next         <= get_point_addr;
-
+					--increment cluster count
 					elsif (dims_count_reg = unsigned(Num_Dims) - 1) then
 						--cluster_count_next <= (others => '0');
 						--dist_count_next    <= dist_count_reg + 1;
@@ -183,6 +183,7 @@ begin
 						cluster_count_next <= cluster_count_reg + 1;
 						dims_count_next    <= (others => '0');
 
+					--write 0's to memory and increment dims count
 					else
 						do_PN_cluster_addr <= '1';
 						PNL_BRAM_we        <= "1";
@@ -190,7 +191,8 @@ begin
 						dims_count_next    <= dims_count_reg + 1;
 					end if;
 				else
-
+					-- we are in second iteration
+					-- loop through clusters
 					if (cluster_count_reg = unsigned(Num_Clusters) - 1) then
 						-- Reset PN_addr and get first value
 						--PN_addr_next <= to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB);
@@ -202,18 +204,24 @@ begin
 						--cluster_count_next <= (others => '0');
 						--dist_count_next    <= dist_count_reg + 1;
 						--cluster_member_count(cluster_count_reg) <= (others => '0');
+
+						--increment cluster count
 						cluster_count_next <= cluster_count_reg + 1;
 						dims_count_next    <= (others => '0');
 
 					else
 						--do_PN_cluster_addr <= '1';
 						--PNL_BRAM_we        <= "1";
+
+						--get  centroid addr
 						PN_addr_next <= resize(centroids_base_reg + ((cluster_count_reg * unsigned(Num_Dims)) + dims_count_reg), PNL_BRAM_ADDR_SIZE_NB);
 						state_next   <= get_curr_centroid;
 					end if;
 				end if;
 
 			when get_point_addr =>
+
+				-- loop through points, if done start second pass of clear mem
 				if (dist_count_reg >= unsigned(Num_Vals) - 1) then
 
 					distance_val_next         <= (others => '0');
@@ -237,11 +245,14 @@ begin
 				end if;
 
 			when get_dims_addr =>
+
+				--loop through dims
 				if (dims_count_reg = unsigned(Num_Dims) - 1) then
 					dims_count_next <= (others => '0');
 					PN_addr_next    <= resize(TO_UNSIGNED(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB) + dist_count_reg, PNL_BRAM_ADDR_SIZE_NB);
 					state_next      <= get_point_addr;
 				else
+					-- gets centroid addr
 					PN_addr_next <= resize(centroids_base_reg + ((active_cluster_reg * unsigned(Num_Dims)) + dims_count_reg), PNL_BRAM_ADDR_SIZE_NB);
 					--resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + unsigned((dist_count_reg * unsigned(Num_Dims)) + dims_count_reg) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
 					--closest_distance_next <= unsigned(PNL_BRAM_dout);
@@ -250,16 +261,23 @@ begin
 				end if;
 
 			when get_cluster_val =>
+
+				--capture centroid value from BRAM
 				new_cluster_next <= unsigned(PNL_BRAM_dout);
 				state_next       <= get_point_val;
 
 			when get_point_val =>
+
 				--closest_distance_next <= unsigned(PNL_BRAM_dout);
+
+				--get address for point
 				PN_addr_next <= resize(to_unsigned(PN_BRAM_BASE, PNL_BRAM_ADDR_SIZE_NB) + unsigned((dist_count_reg * unsigned(Num_Dims)) + dims_count_reg) + PROG_VALS, PNL_BRAM_ADDR_SIZE_NB);
 				state_next   <= inc_cluster_val;
 
 			when inc_cluster_val =>
 
+				-- add point value to cluster val, set addr to curr centroid 
+				--increment dims
 				PNL_BRAM_din       <= std_logic_vector(new_cluster_reg + unsigned(PNL_BRAM_dout));
 				do_PN_cluster_addr <= '1';
 				cluster_addr_next  <= resize(centroids_base_reg + ((active_cluster_reg * unsigned(Num_Dims)) + dims_count_reg), PNL_BRAM_ADDR_SIZE_NB);
@@ -268,14 +286,18 @@ begin
 				state_next         <= get_dims_addr;
 
 			when get_curr_centroid =>
+
+				--store centroid value
 				new_cluster_next      <= unsigned(PNL_BRAM_dout);
 				closest_distance_next <= resize((cluster_member_count_reg(to_integer(cluster_count_reg))), PNL_BRAM_DBITS_WIDTH_NB);
 				state_next            <= divide_cluster_val;
 
+			-- convert to fixed point and do division
 			when divide_cluster_val =>
 				distance_val_next <= resize(to_unsigned(divide(to_ufixed(new_cluster_reg, PN_INTEGER_NB - 1, -PN_PRECISION_NB), to_ufixed(closest_distance_reg, PN_INTEGER_NB - 1, -PN_PRECISION_NB)), PNL_BRAM_DBITS_WIDTH_NB), PNL_BRAM_DBITS_WIDTH_NB);
 				state_next        <= store_cluster_val;
 
+			-- store division result, and increment dims
 			when store_cluster_val =>
 				PNL_BRAM_din       <= std_logic_vector(resize(distance_val_next, PNL_BRAM_DBITS_WIDTH_NB));
 				do_PN_cluster_addr <= '1';
