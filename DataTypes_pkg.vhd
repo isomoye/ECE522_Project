@@ -62,18 +62,24 @@ package DataTypes_pkg is
 	constant PN_UPPER_LIMIT : integer := PNL_BRAM_NUM_WORDS_NB;
 
 	-- Kmeans range
-	constant DIST_BRAM_BASE            : integer := 10240;
+	constant DIST_BRAM_BASE            : integer := 20480;
 	--constant DIST_BRAM_UPPER_LIMIT     : integer := 12288;
-	constant CLUSTER_BASE_ADDR         : integer := 8192;
-	constant COPY_CLUSTER_BASE_ADDR    : integer := 4096;
-	--constant CENTROIDS_BASE_ADDR       : integer := 4096;
-	constant FINAL_CLUSTER_UPPER_LIMIT : integer := 4096 / 2;
+	constant CLUSTER_BASE_ADDR         : integer := 16384;
+	constant COPY_CLUSTER_BASE_ADDR    : integer := 12288;
+	constant NEW_CENTROIDS_BASE_ADDR   : integer := 4096;
+	constant FINAL_CLUSTER_UPPER_LIMIT : integer := 4096;
 	constant FINAL_CLUSTER_BASE_ADDR   : integer := 0;
 
 	constant NUM_VALS_ADDR     : integer := 0;
 	constant NUM_CLUSTERS_ADDR : integer := 1;
 	constant NUM_DIMS_ADDR     : integer := 2;
 
+	constant DEFAULT_VALS     : integer := 600;
+	constant DEFAULT_CLUSTERS : integer := 15;
+	constant DEFAULT_DIMS     : integer := 2;
+
 	constant MAX_ITERATIONS : integer := 100;
 
+	type Select_Enum is (lu_mod, kmeans_drive, calcAll, calcDist, findCentroid, copy, calcCluster, calcTotal, checkAssigns);
+	type myEnum is (a, b, c, d);
 end DataTypes_pkg;

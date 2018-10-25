@@ -39,8 +39,7 @@ entity Controller is
 		LM_ULM_upper_limit  : out std_logic_vector(PNL_BRAM_ADDR_SIZE_NB - 1 downto 0);
 		LM_ULM_load_unload  : out std_logic;
 		Kmeans_start        : out std_logic;
-		Kmeans_ready        : in  std_logic;
-		BRAM_select         : out std_logic
+		Kmeans_ready        : in  std_logic
 	);
 end Controller;
 
@@ -82,7 +81,6 @@ begin
 		LM_ULM_load_unload  <= '0';
 
 		-- Give LoadUnloadMem default control of the memory
-		BRAM_select <= '0';
 
 		case state_reg is
 
@@ -110,14 +108,12 @@ begin
 					Kmeans_start <= '1';
 
 					-- Give Kmeans module control of the memory
-					BRAM_select <= '1';
-					state_next  <= wait_Kmeans;
+					state_next <= wait_Kmeans;
 				end if;
 
 			-- =====================
 			-- Wait for hostogram calculation to complete. Continue to give Kmeans module control of the memory
 			when wait_Kmeans =>
-				BRAM_select <= '1';
 
 				if (Kmeans_ready = '1') then
 
@@ -125,8 +121,8 @@ begin
 					LM_ULM_start <= '1';
 
 					-- Setup memory base and upper_limit for unloading of Kmeansgram from BRAM. ALWAYS SUBSTRACT 1 from the 'UPPER_LIMIT'
-					LM_ULM_base_address <= std_logic_vector(to_unsigned(FINAL_CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
-					LM_ULM_upper_limit  <= std_logic_vector(to_unsigned(FINAL_CLUSTER_UPPER_LIMIT - 1, PNL_BRAM_ADDR_SIZE_NB));
+					LM_ULM_base_address <= std_logic_vector(to_unsigned(CLUSTER_BASE_ADDR, PNL_BRAM_ADDR_SIZE_NB));
+					LM_ULM_upper_limit  <= std_logic_vector(to_unsigned( DIST_BRAM_BASE - 1, PNL_BRAM_ADDR_SIZE_NB));
 
 					-- Set LoadUnloadMem mode to 'unload' data from BRAM to C program
 					LM_ULM_load_unload <= '1';
